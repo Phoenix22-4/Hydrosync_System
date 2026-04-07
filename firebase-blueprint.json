@@ -1,0 +1,116 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "System user profile",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Full name" },
+        "email": { "type": "string", "format": "email", "description": "Email address" },
+        "region": { "type": "string", "description": "User's global region" },
+        "created_at": { "type": "string", "format": "date-time", "description": "Account creation timestamp" },
+        "status": { "type": "string", "enum": ["pending", "active", "blocked"], "description": "Account status" },
+        "device_ids": { "type": "array", "items": { "type": "string" }, "description": "List of assigned device IDs" }
+      },
+      "required": ["name", "email", "status"]
+    },
+    "Device": {
+      "title": "Device",
+      "description": "HydroSync IoT device registration",
+      "type": "object",
+      "properties": {
+        "device_id": { "type": "string", "description": "Unique hardware ID" },
+        "token": { "type": "string", "description": "Permanent secure token" },
+        "assigned_to_user": { "type": "string", "description": "UID of assigned user" },
+        "user_name": { "type": "string", "description": "Name of assigned user" },
+        "name": { "type": "string", "description": "User-defined device name" },
+        "ohCap": { "type": "number", "description": "Overhead tank capacity in litres" },
+        "ugCap": { "type": "number", "description": "Underground tank capacity in litres" },
+        "region": { "type": "string", "description": "Device installation region" },
+        "registered_at": { "type": "string", "format": "date-time", "description": "First connection timestamp" },
+        "status": { "type": "string", "enum": ["unassigned", "active", "blocked"], "description": "Device status" }
+      },
+      "required": ["device_id", "token", "status"]
+    },
+    "Telemetry": {
+      "title": "Telemetry",
+      "description": "Real-time sensor data",
+      "type": "object",
+      "properties": {
+        "recorded_at": { "type": "string", "format": "date-time", "description": "Data point timestamp" },
+        "overhead_level": { "type": "number", "description": "Overhead level 0-100" },
+        "underground_level": { "type": "number", "description": "Underground level 0-100" },
+        "pump_status": { "type": "boolean", "description": "Pump ON/OFF state" },
+        "pump_current": { "type": "number", "description": "Current draw in Amps" },
+        "system_status": { "type": "string", "description": "Status string from firmware" }
+      },
+      "required": ["recorded_at", "overhead_level", "underground_level", "pump_status"]
+    },
+    "PumpEvent": {
+      "title": "PumpEvent",
+      "description": "Pump state change event",
+      "type": "object",
+      "properties": {
+        "event_type": { "type": "string", "enum": ["ON", "OFF"], "description": "Event type" },
+        "event_at": { "type": "string", "format": "date-time", "description": "Event timestamp" },
+        "trigger_source": { "type": "string", "enum": ["auto", "manual"], "description": "What triggered the pump" },
+        "amps_at_event": { "type": "number", "description": "Current draw at event time" },
+        "duration_seconds": { "type": "number", "description": "Duration if OFF event" },
+        "litres_transferred": { "type": "number", "description": "Estimated litres moved" }
+      },
+      "required": ["event_type", "event_at", "trigger_source"]
+    },
+    "AggregateHourly": {
+      "title": "AggregateHourly",
+      "description": "Fleet-wide hourly analytics",
+      "type": "object",
+      "properties": {
+        "hour": { "type": "string", "format": "date-time", "description": "Hour start timestamp" },
+        "total_devices_active": { "type": "number", "description": "Count of active devices" },
+        "total_pumps_on": { "type": "number", "description": "Count of pumps turned ON" },
+        "peak_pumps_simultaneous": { "type": "number", "description": "Max simultaneous pumps" },
+        "total_kwh_estimated": { "type": "number", "description": "Total energy consumed" },
+        "avg_overhead_pct": { "type": "number", "description": "Avg overhead level" },
+        "avg_underground_pct": { "type": "number", "description": "Avg underground level" }
+      },
+      "required": ["hour"]
+    },
+    "ActivityLog": {
+      "title": "ActivityLog",
+      "description": "System audit trail",
+      "type": "object",
+      "properties": {
+        "timestamp": { "type": "string", "format": "date-time", "description": "Event timestamp" },
+        "user_id": { "type": "string", "description": "UID of involved user" },
+        "device_id": { "type": "string", "description": "ID of involved device" },
+        "action": { "type": "string", "description": "Description of action" },
+        "performed_by": { "type": "string", "description": "Who performed the action" }
+      },
+      "required": ["timestamp", "action", "performed_by"]
+    },
+    "Alert": {
+      "title": "Alert",
+      "description": "System and safety alerts",
+      "type": "object",
+      "properties": {
+        "device_id": { "type": "string", "description": "Source device ID" },
+        "user_id": { "type": "string", "description": "Target user UID" },
+        "alert_type": { "type": "string", "description": "Type of alert" },
+        "message": { "type": "string", "description": "Alert message" },
+        "triggered_at": { "type": "string", "format": "date-time", "description": "Alert timestamp" },
+        "read": { "type": "boolean", "description": "Read status" },
+        "push_sent": { "type": "boolean", "description": "If push was sent" }
+      },
+      "required": ["device_id", "user_id", "alert_type", "message", "triggered_at"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": { "schema": "User", "description": "User profiles" },
+    "/devices/{deviceId}": { "schema": "Device", "description": "Device registry" },
+    "/devices/{deviceId}/telemetry/{telemetryId}": { "schema": "Telemetry", "description": "Device telemetry history" },
+    "/devices/{deviceId}/pump_events/{eventId}": { "schema": "PumpEvent", "description": "Pump state changes" },
+    "/aggregate_hourly/{hourId}": { "schema": "AggregateHourly", "description": "Fleet-wide hourly analytics" },
+    "/activity_log/{logId}": { "schema": "ActivityLog", "description": "System audit trail" },
+    "/alerts/{alertId}": { "schema": "Alert", "description": "User-specific alerts" }
+  }
+}

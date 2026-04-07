@@ -1,0 +1,7 @@
+{
+  "name": "HydroSync",
+  "description": "IoT-based dual-tank autonomous water management system with real-time MQTT telemetry, dry-run protection, and battery backup.",
+  "requestFramePermissions": [
+    "notifications"
+  ]
+}

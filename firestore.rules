@@ -1,0 +1,323 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: Firebase Auth UID
+    // Fields:
+    //   - name: string (required) - Full name
+    //   - email: string (required, format: email) - Email address
+    //   - region: string (optional) - User's global region
+    //   - created_at: timestamp (optional) - Account creation timestamp
+    //   - status: string (required, enum: ["pending", "active", "blocked"]) - Account status
+    //   - device_ids: list (optional) - List of assigned device IDs
+    //
+    // Collection: devices
+    // Document ID: device_id (e.g. "AQ_001")
+    // Fields:
+    //   - device_id: string (required) - Unique hardware ID
+    //   - token: string (required, immutable) - Permanent secure token
+    //   - assigned_to_user: string (optional) - UID of assigned user
+    //   - user_name: string (optional) - Name of assigned user
+    //   - name: string (optional) - User-defined device name
+    //   - ohCap: number (optional) - Overhead tank capacity in litres
+    //   - ugCap: number (optional) - Underground tank capacity in litres
+    //   - region: string (optional) - Device installation region
+    //   - registered_at: timestamp (optional) - First connection timestamp
+    //   - status: string (required, enum: ["unassigned", "active", "blocked"]) - Device status
+    //
+    // Collection: devices/{deviceId}/telemetry
+    // Document ID: auto
+    // Fields:
+    //   - recorded_at: timestamp (required) - Data point timestamp
+    //   - overhead_level: number (required, 0-100) - Overhead level
+    //   - underground_level: number (required, 0-100) - Underground level
+    //   - pump_status: bool (required) - Pump ON/OFF state
+    //   - pump_current: number (optional) - Current draw in Amps
+    //   - system_status: string (optional) - Status string from firmware
+    //
+    // Collection: devices/{deviceId}/pump_events
+    // Document ID: auto
+    // Fields:
+    //   - event_type: string (required, enum: ["ON", "OFF"]) - Event type
+    //   - event_at: timestamp (required) - Event timestamp
+    //   - trigger_source: string (required, enum: ["auto", "manual"]) - What triggered the pump
+    //   - amps_at_event: number (optional) - Current draw at event time
+    //   - duration_seconds: number (optional) - Duration if OFF event
+    //   - litres_transferred: number (optional) - Estimated litres moved
+    //
+    // Collection: aggregate_hourly
+    // Document ID: ISO hour string
+    // Fields:
+    //   - hour: timestamp (required) - Hour start timestamp
+    //   - total_devices_active: number (optional) - Count of active devices
+    //   - total_pumps_on: number (optional) - Count of pumps turned ON
+    //   - peak_pumps_simultaneous: number (optional) - Max simultaneous pumps
+    //   - total_kwh_estimated: number (optional) - Total energy consumed
+    //   - avg_overhead_pct: number (optional) - Avg overhead level
+    //   - avg_underground_pct: number (optional) - Avg underground level
+    //
+    // Collection: activity_log
+    // Document ID: auto
+    // Fields:
+    //   - timestamp: timestamp (required) - Event timestamp
+    //   - user_id: string (optional) - UID of involved user
+    //   - device_id: string (optional) - ID of involved device
+    //   - action: string (required) - Description of action
+    //   - performed_by: string (required) - Who performed the action
+    //
+    // Collection: alerts
+    // Document ID: auto
+    // Fields:
+    //   - device_id: string (required) - Source device ID
+    //   - user_id: string (required) - Target user UID
+    //   - alert_type: string (required) - Type of alert
+    //   - message: string (required) - Alert message
+    //   - triggered_at: timestamp (required) - Alert timestamp
+    //   - read: bool (required) - Read status
+    //   - push_sent: bool (optional) - If push was sent
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.email == "visiontech072025@gmail.com" ||
+        request.auth.token.email == "htmlfirephoenix@gmail.com" ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'superuser'))
+      );
+    }
+
+    // Superuser has full control - only visiontech072025@gmail.com
+    function isSuperuser() {
+      return isAuthenticated() && request.auth.token.email == "visiontech072025@gmail.com";
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // Helper function to count user's devices
+    function getUserDeviceCount(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data.device_ids.size();
+    }
+
+    function hasReachedDeviceLimit(userId) {
+      return getUserDeviceCount(userId) >= 4;
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasRequiredFields(['name', 'email', 'status']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             isValidEmail(data.email) &&
+             data.status in ['pending', 'active', 'blocked'] &&
+             (!('region' in data) || (data.region is string && data.region.size() < 100)) &&
+             (!('device_ids' in data) || (data.device_ids is list && data.device_ids.size() < 20));
+    }
+
+    function isValidDevice(data) {
+      return hasRequiredFields(['device_id', 'token', 'status']) &&
+             data.device_id is string && data.device_id.size() > 0 && data.device_id.size() < 50 &&
+             data.token is string && data.token.size() > 0 && data.token.size() < 100 &&
+             data.status in ['unassigned', 'active', 'blocked'] &&
+             (!('ohCap' in data) || (data.ohCap is number && data.ohCap >= 0)) &&
+             (!('ugCap' in data) || (data.ugCap is number && data.ugCap >= 0));
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /system/{docId} {
+      // System status is readable by everyone (public) to avoid permission errors on landing/login.
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /aggregate_hourly/{hourId} {
+      // Aggregated data is readable by everyone (public).
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /users/{userId} {
+      // Users can read their own profile. Admins can read all.
+      // NO mixed content leak: users collection contains email, so read is owner-only.
+      allow read: if isOwner(userId) || isAdmin();
+      
+      // Users can create their own profile during registration.
+      // Admins can create any.
+      // Prevent self-escalation: role must be 'user' or 'client' if not admin.
+      allow create: if isAuthenticated() && (
+        (isOwner(userId) && isValidUser(request.resource.data) && (!('role' in request.resource.data) || request.resource.data.role == 'user')) ||
+        isAdmin()
+      );
+      
+      // Users can update their own profile (except role).
+      // Admins can update any.
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && (
+        (isOwner(userId) && areImmutableFieldsUnchanged(['role', 'email'])) ||
+        isAdmin()
+      );
+      
+      // Only admins can delete users
+      allow delete: if isAdmin();
+    }
+
+    match /devices/{deviceId} {
+      // Allow read for:
+      // - Anyone (to check if device exists during registration)
+      // - Admins (full access)
+      // - Authenticated users (for charts and device lists)
+      // - Users who own the device
+      allow read: if true;  // Allow anyone to read device info (needed for registration)
+      
+      // Only admins can create devices
+      allow create: if isAdmin();
+      
+      // Allow update for:
+      // - Admins
+      // - New users claiming unassigned devices during registration
+      // - Device owners updating their own devices
+      allow update: if isAdmin() || (
+        // New user claiming unassigned device
+        isAuthenticated() && 
+        (resource.data.status == 'unassigned' || resource.data.status == 'pending_confirmation') &&
+        request.resource.data.assigned_to_user == request.auth.uid &&
+        request.resource.data.status in ['pending_confirmation', 'active'] &&
+        !hasReachedDeviceLimit(request.auth.uid)
+      ) || (
+        // Device owner updating settings
+        isAuthenticated() && 
+        resource.data.assigned_to_user == request.auth.uid &&
+        resource.data.status == 'active' &&
+        request.resource.data.status == 'active'
+      );
+    }
+
+    // Top-level telemetry collection for aggregated data
+    match /telemetry/{docId} {
+      // Authenticated users can read telemetry. Admins can read all.
+      allow read: if isAuthenticated() || isAdmin();
+      // Only admins/system can write telemetry.
+      allow write: if isAdmin();
+    }
+
+    match /devices/{deviceId}/telemetry/{telemetryId} {
+      // Users can read telemetry for their own devices. Admins can read all.
+      allow read: if isAdmin() || (
+        isAuthenticated() && get(/databases/$(database)/documents/devices/$(deviceId)).data.assigned_to_user == request.auth.uid
+      );
+      // Only admins/system can write telemetry.
+      allow write: if isAdmin();
+    }
+
+    match /devices/{deviceId}/pump_events/{eventId} {
+      allow read: if isAdmin() || (
+        isAuthenticated() && get(/databases/$(database)/documents/devices/$(deviceId)).data.assigned_to_user == request.auth.uid
+      );
+      allow write: if isAdmin();
+    }
+
+
+
+    match /activity_log/{logId} {
+      // Admins can read/write all. Authenticated users can read activity logs.
+      // Note: device_id in activity_log is the logical device_id (e.g., "HOME_01"), not Firestore doc ID
+      allow read: if isAuthenticated() || isAdmin();
+      // Allow create for authenticated users (for logging device linking, etc.)
+      allow create: if isAuthenticated() || isAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    match /alerts/{alertId} {
+      // Users can read their own alerts. Admins can read all.
+      allow read: if isAdmin() || (
+        isAuthenticated() && (
+          resource.data.user_id == request.auth.uid
+        )
+      );
+      // Users can mark their own alerts as read.
+      allow update: if isAuthenticated() && resource.data.user_id == request.auth.uid &&
+                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      // Admins can create alerts. Users can create alerts for notifications to admin (type: new_user, device_added, etc.)
+      allow create: if isAdmin() || (
+        isAuthenticated() && 
+        request.resource.data.type in ['new_user', 'device_added', 'new_admin'] &&
+        request.resource.data.read == false
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /commands/{commandId} {
+      // Users can only see and create commands for devices they own.
+      // Admins can see and create all.
+      allow read: if isAdmin() || (
+        isAuthenticated() && 
+        get(/databases/$(database)/documents/devices/$(resource.data.device_id)).data.assigned_to_user == request.auth.uid
+      );
+      allow create: if isAdmin() || (
+        isAuthenticated() && 
+        get(/databases/$(database)/documents/devices/$(request.resource.data.device_id)).data.assigned_to_user == request.auth.uid
+      );
+      // Only the bridge/admin can update command status (e.g. from 'pending' to 'completed').
+      allow update: if isAdmin();
+      // Commands should not be deleted by users for audit purposes.
+      allow delete: if isAdmin();
+    }
+
+    // Device tokens collection - for verifying device ownership
+    match /device_tokens/{tokenId} {
+      // Users can create tokens for themselves
+      allow create: if isAuthenticated() && 
+        request.resource.data.user_id == request.auth.uid;
+      // Users can read their own tokens
+      allow read: if isAuthenticated() && 
+        (resource.data.user_id == request.auth.uid || isAdmin());
+      // Users can update their own tokens (mark as used)
+      allow update: if isAuthenticated() && 
+        resource.data.user_id == request.auth.uid;
+      // Only admins can delete
+      allow delete: if isAdmin();
+    }
+
+    // Token requests collection - legacy for admin processing
+    match /token_requests/{requestId} {
+      // Users can create token requests
+      allow create: if isAuthenticated();
+      // Only admins can read/update/delete
+      allow read, update, delete: if isAdmin();
+    }
+
+
+  }
+}
