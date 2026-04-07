@@ -6,3 +6,6 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# ESP32 Firmware - Keep in repo but exclude from app builds
+firmware/
