@@ -21,6 +21,7 @@ import TankScene from '../components/TankScene';
 import { isDeviceOffline, getLastSeenString } from '../lib/status';
 import PullToRefresh from '../components/PullToRefresh';
 import FloatingChatBot from '../components/FloatingChatBot';
+import { useMQTT } from '../hooks/useMQTT';
 import mqtt from 'mqtt';
 
 export default function Dashboard() {
@@ -40,6 +41,54 @@ export default function Dashboard() {
   const [isSimulating, setIsSimulating] = useState(false);
 
   const activeDevice = devices[activeDeviceIdx] ?? devices[0];
+
+  // ── MQTT Connection ──────────────────────────────────
+  const { isConnected: mqttConnected, subscribe, publish: mqttPublish } = useMQTT(
+    activeDevice?.mqtt_broker ? (
+      activeDevice.mqtt_broker.startsWith('ws://') || activeDevice.mqtt_broker.startsWith('wss://')
+        ? activeDevice.mqtt_broker
+        : `wss://${activeDevice.mqtt_broker}:8884/mqtt`
+    ) : undefined,
+    {
+      username: activeDevice?.mqtt_username,
+      password: activeDevice?.mqtt_password,
+      onMessage: (topic: string, message: Buffer) => {
+        try {
+          const payload = JSON.parse(message.toString());
+
+          if (topic === `devices/${activeDevice?.id}/data`) {
+            // Update telemetry with live data
+            setTelemetry({
+              recorded_at: serverTimestamp() as any,
+              overhead_level: payload.overhead_level ?? telemetry?.overhead_level ?? 50,
+              underground_level: payload.underground_level ?? telemetry?.underground_level ?? 50,
+              pump_status: payload.pump_status ?? telemetry?.pump_status ?? false,
+              pump_current: parseFloat(payload.pump_current) || telemetry?.pump_current || 0,
+              system_status: payload.system_status || telemetry?.system_status || 'System Ready',
+            });
+
+            // Update device status in Firestore
+            if (activeDevice) {
+              updateDoc(doc(db, 'devices', activeDevice.id), {
+                last_seen: serverTimestamp(),
+                overhead_level: payload.overhead_level,
+                underground_level: payload.underground_level,
+                pump_status: payload.pump_status,
+                current_draw: parseFloat(payload.pump_current) || 0,
+                error_state: payload.system_status,
+              });
+            }
+          } else if (topic === `devices/${activeDevice?.id}/alerts`) {
+            // Handle alerts
+            console.log('Alert received:', payload);
+            // Could add alert handling here
+          }
+        } catch (err) {
+          console.error('MQTT message parse error:', err);
+        }
+      },
+    }
+  );
 
   // ── Fetch devices ────────────────────────────────────
   useEffect(() => {
@@ -65,6 +114,21 @@ export default function Dashboard() {
       }
     });
   }, [user, activeDeviceIdx]);
+
+  // ── MQTT Subscription for Live Data ──────────────────
+  useEffect(() => {
+    if (!activeDevice || !mqttConnected) return;
+
+    const dataTopic = `devices/${activeDevice.id}/data`;
+    const alertTopic = `devices/${activeDevice.id}/alerts`;
+
+    subscribe(dataTopic);
+    subscribe(alertTopic);
+
+    return () => {
+      // Cleanup would happen in the hook
+    };
+  }, [activeDevice, mqttConnected, subscribe]);
 
   // ── Setup gate ────────────────────────────────────────
   useEffect(() => {
@@ -218,7 +282,12 @@ export default function Dashboard() {
         user_id:    user.uid,
       });
 
-      if (activeDevice.mqtt_broker) {
+      if (mqttConnected) {
+        // Use the persistent MQTT connection
+        const commandTopic = `devices/${activeDevice.id}/commands`;
+        mqttPublish(commandTopic, cmd);
+      } else if (activeDevice.mqtt_broker) {
+        // Fallback: create temporary connection
         try {
           let brokerUrl = activeDevice.mqtt_broker;
           if (!brokerUrl.startsWith('ws://') && !brokerUrl.startsWith('wss://')) {
@@ -229,7 +298,7 @@ export default function Dashboard() {
             password: activeDevice.mqtt_password,
             clientId: `hydrosync_web_${Math.random().toString(16).slice(2, 8)}`,
           });
-          client.on('connect', () => { client.publish(`hydrosync/commands/${activeDevice.id}`, cmd); client.end(); });
+          client.on('connect', () => { client.publish(`devices/${activeDevice.id}/commands`, cmd); client.end(); });
           client.on('error',   (err) => { console.error('MQTT:', err); client.end(); });
         } catch (err) {
           console.error('MQTT connect failed:', err);
@@ -244,7 +313,7 @@ export default function Dashboard() {
     } catch (err) {
       console.error('sendCommand error:', err);
     }
-  }, [activeDevice, user, telemetry]);
+  }, [activeDevice, user, telemetry, mqttConnected, mqttPublish]);
 
   // ── Loading ───────────────────────────────────────────
   if (loading) {
