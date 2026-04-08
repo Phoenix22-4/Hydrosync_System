@@ -224,14 +224,13 @@ HydroSync provides comprehensive notifications for all critical system events. N
 4. Click **"I have copied my token — Enter it"** to continue
 
 #### Step 4: Firmware and Device Connectivity
-- The current ESP32 firmware version stores WiFi and HiveMQ credentials in the ESP32's flash memory (NVS). This means you only need to configure the device once using the captive portal.
 - When the device powers on without saved credentials or after a factory reset, it starts the WiFi network: `HydroSync_Setup`.
 - Connect your phone to `HydroSync_Setup` and open `http://192.168.4.1/` if the portal page does not appear automatically.
+- Enter your WiFi network name (SSID), password, and device token from the dashboard.
+- The device will save these credentials and connect to your WiFi and the MQTT broker.
 - The portal form requires:
   - WiFi SSID
   - WiFi Password
-  - Device ID
-  - HiveMQ Host
   - HiveMQ Username
   - HiveMQ Password
 - After saving, the device reboots and reconnects automatically to your WiFi and HiveMQ cloud.
@@ -249,15 +248,6 @@ HydroSync provides comprehensive notifications for all critical system events. N
 - After reset, reconnect to `HydroSync_Setup` and reconfigure the device.
 
 ### .env.local and API Configuration
-- Your web app uses a local environment file named `.env.local`.
-- It must contain the Gemini API key and the app's deployed URL.
-- Example:
-```
-GEMINI_API_KEY="AIzaSyDZ3lsOhZ4HRY9JmZlgulOjRrZ5KYZWdpk"
-APP_URL="https://your-app-url.example"
-```
-- Keep `.env.local` private and do not commit it to GitHub.
-
 ### Important Security Note
 - The file `firmware/secrets.h` now contains only the HiveMQ Root CA certificate.
 - Your WiFi SSID, HiveMQ host, username, and password are saved securely in the ESP32's non-volatile storage and are not stored in this file.

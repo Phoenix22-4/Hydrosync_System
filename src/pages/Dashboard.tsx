@@ -39,6 +39,20 @@ export default function Dashboard() {
   const [unreadAlerts, setUnreadAlerts] = useState(0);
   const [isOffline, setIsOffline]       = useState(false);
   const [isSimulating, setIsSimulating] = useState(false);
+  const [isInternetOffline, setIsInternetOffline] = useState(!navigator.onLine);
+
+  useEffect(() => {
+    const handleOnline = () => setIsInternetOffline(false);
+    const handleOffline = () => setIsInternetOffline(true);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   const activeDevice = devices[activeDeviceIdx] ?? devices[0];
 
@@ -384,7 +398,14 @@ export default function Dashboard() {
           <div>
             <h1 className="text-lg font-bold text-white leading-none">HydroSync</h1>
             <p className="text-xs text-slate-400 mt-1 font-medium">
-              {activeDevice?.id} — {activeDevice?.name}
+              {isInternetOffline ? (
+                <span className="text-red-400 flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3" />
+                  Offline - Limited Functionality
+                </span>
+              ) : (
+                `${activeDevice?.name || 'Device'} • ${getLastSeenString(telemetry)}`
+              )}
             </p>
           </div>
         </div>

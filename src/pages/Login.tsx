@@ -18,6 +18,14 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+
+    // Check if online
+    if (!navigator.onLine) {
+      setError("You are currently offline. HydroSync requires an internet connection to sign in.");
+      setLoading(false);
+      return;
+    }
+
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       

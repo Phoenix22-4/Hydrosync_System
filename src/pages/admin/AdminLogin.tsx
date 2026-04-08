@@ -29,6 +29,15 @@ export default function AdminLogin() {
     e.preventDefault();
     setLoading(true);
     setAccessDenied(false);
+
+    // Check if online
+    if (!navigator.onLine) {
+      setDeniedReason("You are currently offline. HydroSync requires an internet connection to function.");
+      setAccessDenied(true);
+      setLoading(false);
+      return;
+    }
+
     try {
       // 1. Authenticate with Firebase Auth
       const userCredential = await signInWithEmailAndPassword(auth, email, password);

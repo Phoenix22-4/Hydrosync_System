@@ -30,6 +30,12 @@ export default function CreateAccount() {
     e.preventDefault();
     setError(null);
 
+    // Check if online
+    if (!navigator.onLine) {
+      setError("You are currently offline. HydroSync requires an internet connection to create an account.");
+      return;
+    }
+
     if (formData.password !== formData.confirmPassword) {
       setError("Passwords do not match.");
       return;

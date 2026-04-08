@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { auth, db } from '../../firebase';
 import { useAuth } from '../../App';
@@ -6,16 +6,88 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   Settings, LogOut, ArrowLeft, Shield, Mail, User, Bell, Database, 
   Key, Smartphone, Globe, Clock, ChevronRight, AlertTriangle, RefreshCw,
-  Trash2, Download, Moon, Volume2, Lock, Plus, X, Save
+  Trash2, Download, Moon, Volume2, Lock, Plus, X, Save, Edit
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { doc, getDoc, setDoc, updateDoc, collection, getDocs, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, collection, getDocs, deleteDoc, addDoc } from 'firebase/firestore';
 
 export default function AdminSettings() {
   const { user, profile } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  const [activeSection, setActiveSection] = useState<'account' | 'notifications' | 'system' | 'data' | null>('account');
+  const [activeSection, setActiveSection] = useState<'account' | 'notifications' | 'system' | 'mqtt' | 'data' | null>('account');
+  const [mqttHosts, setMqttHosts] = useState<Array<{id: string, url: string, status: 'active' | 'inactive'}>>([]);
+  const [newHostUrl, setNewHostUrl] = useState('');
+  const [editingHost, setEditingHost] = useState<string | null>(null);
+  const [editUrl, setEditUrl] = useState('');
+
+  useEffect(() => {
+    if (activeSection === 'mqtt') {
+      loadMqttHosts();
+    }
+  }, [activeSection]);
+
+  const loadMqttHosts = async () => {
+    try {
+      const hostsRef = collection(db, 'mqtt_hosts');
+      const snapshot = await getDocs(hostsRef);
+      const hosts = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Array<{id: string, url: string, status: 'active' | 'inactive'}>;
+      setMqttHosts(hosts);
+    } catch (error) {
+      console.error('Error loading MQTT hosts:', error);
+    }
+  };
+
+  const addMqttHost = async () => {
+    if (!newHostUrl.trim()) return;
+    try {
+      await addDoc(collection(db, 'mqtt_hosts'), {
+        url: newHostUrl.trim(),
+        status: 'active'
+      });
+      setNewHostUrl('');
+      loadMqttHosts();
+    } catch (error) {
+      console.error('Error adding MQTT host:', error);
+    }
+  };
+
+  const updateMqttHost = async (id: string) => {
+    if (!editUrl.trim()) return;
+    try {
+      await updateDoc(doc(db, 'mqtt_hosts', id), {
+        url: editUrl.trim()
+      });
+      setEditingHost(null);
+      setEditUrl('');
+      loadMqttHosts();
+    } catch (error) {
+      console.error('Error updating MQTT host:', error);
+    }
+  };
+
+  const deleteMqttHost = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'mqtt_hosts', id));
+      loadMqttHosts();
+    } catch (error) {
+      console.error('Error deleting MQTT host:', error);
+    }
+  };
+
+  const toggleHostStatus = async (id: string, currentStatus: 'active' | 'inactive') => {
+    try {
+      await updateDoc(doc(db, 'mqtt_hosts', id), {
+        status: currentStatus === 'active' ? 'inactive' : 'active'
+      });
+      loadMqttHosts();
+    } catch (error) {
+      console.error('Error toggling host status:', error);
+    }
+  };
 
   const handleLogout = async () => {
     setLoading(true);
@@ -204,56 +276,109 @@ export default function AdminSettings() {
                 <div className="p-6 space-y-4">
                   <div className="flex items-center justify-between">
                     <p className="text-sm text-slate-400">Configure HiveMQ broker URLs for device communication</p>
-                    <button className="px-4 py-2 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors">
-                      <Plus className="w-4 h-4" />
-                      Add Host
-                    </button>
+                    <div className="flex gap-2">
+                      <input
+                        type="url"
+                        value={newHostUrl}
+                        onChange={(e) => setNewHostUrl(e.target.value)}
+                        placeholder="mqtt://broker.hivemq.com"
+                        className="bg-[#1a2234] border border-white/5 rounded-lg px-3 py-2 text-white text-sm w-64"
+                      />
+                      <button 
+                        onClick={addMqttHost}
+                        disabled={!newHostUrl.trim()}
+                        className="px-4 py-2 bg-cyan-500/10 hover:bg-cyan-500/20 disabled:opacity-50 disabled:cursor-not-allowed text-cyan-400 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Add Host
+                      </button>
+                    </div>
                   </div>
                   
                   <div className="space-y-3">
-                    <div className="bg-[#1a2234] border border-white/5 rounded-xl p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-green-500/10 rounded-lg flex items-center justify-center">
-                            <Globe className="w-4 h-4 text-green-500" />
+                    {mqttHosts.map(host => (
+                      <div key={host.id} className="bg-[#1a2234] border border-white/5 rounded-xl p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className={cn(
+                              "w-8 h-8 rounded-lg flex items-center justify-center",
+                              host.status === 'active' ? "bg-green-500/10" : "bg-yellow-500/10"
+                            )}>
+                              <Globe className={cn(
+                                "w-4 h-4",
+                                host.status === 'active' ? "text-green-500" : "text-yellow-500"
+                              )} />
+                            </div>
+                            {editingHost === host.id ? (
+                              <div className="flex-1 flex gap-2">
+                                <input
+                                  type="url"
+                                  value={editUrl}
+                                  onChange={(e) => setEditUrl(e.target.value)}
+                                  className="flex-1 bg-[#0f172a] border border-white/5 rounded-lg px-3 py-2 text-white text-sm"
+                                  placeholder="mqtt://broker.hivemq.com"
+                                />
+                                <button
+                                  onClick={() => updateMqttHost(host.id)}
+                                  className="px-3 py-2 bg-green-500/10 hover:bg-green-500/20 text-green-400 rounded-lg text-sm"
+                                >
+                                  <Save className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => setEditingHost(null)}
+                                  className="px-3 py-2 bg-slate-500/10 hover:bg-slate-500/20 text-slate-400 rounded-lg text-sm"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex-1">
+                                <p className="text-sm font-bold text-white">{host.url}</p>
+                                <p className="text-xs text-slate-500">{host.status === 'active' ? 'Active' : 'Inactive'}</p>
+                              </div>
+                            )}
                           </div>
-                          <div>
-                            <p className="text-sm font-bold text-white">mqtt.hydrosync.io</p>
-                            <p className="text-xs text-slate-500">Primary broker - Active</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button className="p-2 hover:bg-white/5 rounded-lg text-slate-400 hover:text-white transition-colors">
-                            <Settings className="w-4 h-4" />
-                          </button>
-                          <button className="p-2 hover:bg-red-500/10 rounded-lg text-slate-400 hover:text-red-400 transition-colors">
-                            <X className="w-4 h-4" />
-                          </button>
+                          {editingHost !== host.id && (
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => {
+                                  setEditingHost(host.id);
+                                  setEditUrl(host.url);
+                                }}
+                                className="p-2 hover:bg-white/5 rounded-lg text-slate-400 hover:text-white transition-colors"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => toggleHostStatus(host.id, host.status)}
+                                className={cn(
+                                  "px-3 py-1 rounded-lg text-xs font-bold",
+                                  host.status === 'active' 
+                                    ? "bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400" 
+                                    : "bg-green-500/10 hover:bg-green-500/20 text-green-400"
+                                )}
+                              >
+                                {host.status === 'active' ? 'Deactivate' : 'Activate'}
+                              </button>
+                              <button
+                                onClick={() => deleteMqttHost(host.id)}
+                                className="p-2 hover:bg-red-500/10 rounded-lg text-slate-400 hover:text-red-400 transition-colors"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
-                    </div>
+                    ))}
                     
-                    <div className="bg-[#1a2234] border border-white/5 rounded-xl p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-yellow-500/10 rounded-lg flex items-center justify-center">
-                            <Globe className="w-4 h-4 text-yellow-500" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-bold text-white">mqtt-backup.hydrosync.io</p>
-                            <p className="text-xs text-slate-500">Backup broker - Standby</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button className="p-2 hover:bg-white/5 rounded-lg text-slate-400 hover:text-white transition-colors">
-                            <Settings className="w-4 h-4" />
-                          </button>
-                          <button className="p-2 hover:bg-red-500/10 rounded-lg text-slate-400 hover:text-red-400 transition-colors">
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
+                    {mqttHosts.length === 0 && (
+                      <div className="text-center py-8 text-slate-500">
+                        <Globe className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                        <p>No MQTT hosts configured</p>
+                        <p className="text-sm">Add your first HiveMQ broker URL above</p>
                       </div>
-                    </div>
+                    )}
                   </div>
                   
                   <div className="pt-4 border-t border-white/5">
@@ -262,7 +387,7 @@ export default function AdminSettings() {
                         <Globe className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
                         <div>
                           <p className="text-sm font-bold text-blue-400">MQTT Configuration</p>
-                          <p className="text-xs text-slate-500 mt-1">Devices will automatically connect to the first available broker. Add backup hosts for redundancy.</p>
+                          <p className="text-xs text-slate-500 mt-1">Devices will automatically connect to the first available active broker. Add backup hosts for redundancy and scalability.</p>
                         </div>
                       </div>
                     </div>

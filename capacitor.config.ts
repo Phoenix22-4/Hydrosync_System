@@ -25,5 +25,7 @@ const config: CapacitorConfig = {
   bundledWebRuntime: false,
   icon: 'public/icon.png'
 };
+  icon: 'public/icon.png'
+};
 
 export default config;

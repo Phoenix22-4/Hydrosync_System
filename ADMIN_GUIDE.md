@@ -212,6 +212,16 @@ Refer to the `MQTT_BRIDGE_TEMPLATE.md` file for the complete reference implement
   - HiveMQ Host
   - HiveMQ Username
   - HiveMQ Password
+- After configuration, the device saves credentials to NVS and connects to WiFi and MQTT broker.
+- Factory reset: Hold BOOT button (GPIO 0) low to GND for 5 seconds to erase credentials and restart portal.
+- On first boot or after factory reset, the ESP32 starts the captive portal network `HydroSync_Setup` and serves the setup page at `http://192.168.4.1/`.
+- The setup portal collects:
+  - WiFi SSID
+  - WiFi Password
+  - Device ID
+  - HiveMQ Host
+  - HiveMQ Username
+  - HiveMQ Password
 
 ### Factory Reset
 - The factory reset button is connected to **GPIO 0**.
