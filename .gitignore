@@ -12,5 +12,7 @@ coverage/
 android/.idea/
 gradle-8.14.3-all.zip
 
-# ESP32 Firmware - Keep in repo but exclude from app builds
+# ESP32 & Arduino Firmware - include .ino files, exclude others
 firmware/
+!firmware/*.ino
+!firmware/*.h
