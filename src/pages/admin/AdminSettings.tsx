@@ -18,6 +18,8 @@ export default function AdminSettings() {
   const [activeSection, setActiveSection] = useState<'account' | 'notifications' | 'system' | 'mqtt' | 'data' | null>('account');
   const [mqttHosts, setMqttHosts] = useState<Array<{id: string, url: string, status: 'active' | 'inactive'}>>([]);
   const [newHostUrl, setNewHostUrl] = useState('');
+  const [editingHost, setEditingHost] = useState<string | null>(null);
+  const [editUrl, setEditUrl] = useState('');
   const [notificationSettings, setNotificationSettings] = useState({
     emailAlerts: true,
     pushNotifications: true,
@@ -186,6 +188,19 @@ export default function AdminSettings() {
     }
     if (!confirm('SUPERUSER ACTION: Are you sure you want to delete ALL data except users? This cannot be undone.')) return;
     await resetSystem();
+  };
+
+  const handleLogout = async () => {
+    try {
+      setLoading(true);
+      await auth.signOut();
+      navigate('/login');
+    } catch (error) {
+      console.error('Error logging out:', error);
+      alert('Failed to log out');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const settingsSections = [

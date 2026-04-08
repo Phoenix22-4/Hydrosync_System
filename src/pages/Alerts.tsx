@@ -5,7 +5,7 @@ import { db } from '../firebase';
 import { useAuth } from '../App';
 import { Alert } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Bell, Trash2, CheckCircle2, Filter, Droplets, BarChart2, Settings, Loader2 } from 'lucide-react';
+import { ArrowLeft, Bell, Trash2, CheckCircle2, Filter, Droplets, BarChart2, Settings, Loader2, Circle } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export default function Alerts() {
@@ -130,13 +130,24 @@ export default function Alerts() {
                       </p>
                     </div>
                     <div className="flex gap-2">
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); markAsUnread(alert.id); }}
-                        className="p-2 bg-white/5 text-slate-600 hover:text-orange-500 hover:bg-orange-500/10 rounded-lg transition-all opacity-0 group-hover:opacity-100"
-                        title="Mark as unread"
-                      >
-                        <CheckCircle2 className="w-4 h-4" />
-                      </button>
+                      {!alert.read && (
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); markAsRead(alert.id); }}
+                          className="p-2 bg-cyan-500/10 text-cyan-500 hover:bg-cyan-500/20 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                          title="Mark as read"
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                        </button>
+                      )}
+                      {alert.read && (
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); markAsUnread(alert.id); }}
+                          className="p-2 bg-orange-500/10 text-orange-500 hover:bg-orange-500/20 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                          title="Mark as unread"
+                        >
+                          <Circle className="w-4 h-4" />
+                        </button>
+                      )}
                       <button 
                         onClick={(e) => { e.stopPropagation(); deleteAlert(alert.id); }}
                         className="p-2 bg-white/5 text-slate-600 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all opacity-0 group-hover:opacity-100"

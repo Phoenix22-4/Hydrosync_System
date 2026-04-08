@@ -5,7 +5,7 @@ import { db } from '../../firebase';
 import { useAuth } from '../../App';
 import { Device } from '../../types';
 import { motion } from 'motion/react';
-import { Smartphone, Search, Copy, Check, ShieldAlert, ShieldCheck, Filter, Loader2, Wifi, WifiOff, Key, X, Save, Zap, ArrowLeft, Eye, EyeOff } from 'lucide-react';
+import { Smartphone, Search, Copy, Check, ShieldAlert, ShieldCheck, Filter, Loader2, Wifi, WifiOff, Key, X, Save, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { isDeviceOffline, getLastSeenString } from '../../lib/status';
 import { Telemetry } from '../../types';
@@ -22,7 +22,6 @@ export default function AdminDevices() {
   const [mqttForm, setMqttForm] = useState({ username: '', password: '', broker: '' });
   const [savingMqtt, setSavingMqtt] = useState(false);
   const [showMqttPassword, setShowMqttPassword] = useState(false);
-  const [simulating, setSimulating] = useState<string | null>(null);
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -92,25 +91,6 @@ export default function AdminDevices() {
       console.error("Error saving MQTT credentials:", error);
     } finally {
       setSavingMqtt(false);
-    }
-  };
-
-  const simulateTelemetry = async (deviceId: string) => {
-    setSimulating(deviceId);
-    try {
-      // Simulate a device sending telemetry
-      await addDoc(collection(db, 'devices', deviceId, 'telemetry'), {
-        recorded_at: serverTimestamp(),
-        overhead_level: Math.floor(Math.random() * 100),
-        underground_level: Math.floor(Math.random() * 100),
-        pump_status: Math.random() > 0.5,
-        pump_current: Math.random() * 5,
-        system_status: 'Simulated Data'
-      });
-    } catch (error) {
-      console.error("Error simulating telemetry:", error);
-    } finally {
-      setSimulating(null);
     }
   };
 
@@ -266,14 +246,6 @@ export default function AdminDevices() {
                           <td className="px-6 py-4 text-xs text-slate-500">{d.registered_at?.toDate().toLocaleDateString() || '—'}</td>
                           <td className="px-6 py-4 text-right">
                             <div className="flex items-center justify-end gap-2">
-                              <button 
-                                onClick={() => simulateTelemetry(d.id)}
-                                disabled={simulating === d.id}
-                                className="p-2 bg-orange-500/10 text-orange-500 hover:bg-orange-500/20 rounded-lg transition-all"
-                                title="Simulate Telemetry"
-                              >
-                                {simulating === d.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
-                              </button>
                               <button 
                                 onClick={() => handleMqttEdit(d)}
                                 className="p-2 bg-cyan-500/10 text-cyan-500 hover:bg-cyan-500/20 rounded-lg transition-all"
