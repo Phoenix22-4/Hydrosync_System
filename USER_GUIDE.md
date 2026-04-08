@@ -226,7 +226,8 @@ HydroSync provides comprehensive notifications for all critical system events. N
 #### Step 4: Firmware and Device Connectivity
 - When the device powers on without saved credentials or after a factory reset, it starts the WiFi network: `HydroSync_Setup`.
 - Connect your phone to `HydroSync_Setup` and open `http://192.168.4.1/` if the portal page does not appear automatically.
-- Enter your WiFi network name (SSID), password, and device token from the dashboard.
+- Enter your WiFi network name (SSID), password, HiveMQ username, and HiveMQ password.
+- The device ID and HiveMQ host are preconfigured in the firmware and do not need to be entered by the customer.
 - The device will save these credentials and connect to your WiFi and the MQTT broker.
 - The portal form requires:
   - WiFi SSID
@@ -243,14 +244,21 @@ HydroSync provides comprehensive notifications for all critical system events. N
 - If the display remains blank, verify the Serial2 wiring and the Arduino board power.
 
 #### Step 6: Factory Reset
-- Hold the BOOT button (GPIO 0) to GND for at least 5 seconds while the device is powered on.
-- This erases saved credentials and restarts the device in setup mode.
+- Use the triple power-cycle reset sequence:
+  1. Power OFF for 2 seconds.
+  2. Power ON for 2 seconds.
+  3. Power OFF for 2 seconds.
+  4. Power ON for 2 seconds.
+  5. Power OFF for 2 seconds.
+  6. Power ON the device again.
+- If the firmware detects three boots within the reset window, it erases saved credentials and restarts in captive portal mode.
+- For advanced service access, connect via USB serial at 115200 baud and send the command `RESET_NVS`.
 - After reset, reconnect to `HydroSync_Setup` and reconfigure the device.
 
 ### .env.local and API Configuration
 ### Important Security Note
-- The file `firmware/secrets.h` now contains only the HiveMQ Root CA certificate.
-- Your WiFi SSID, HiveMQ host, username, and password are saved securely in the ESP32's non-volatile storage and are not stored in this file.
+- The file `firmware/secrets.h` contains the hardcoded `DEVICE_ID`, `HIVEMQ_HOST`, and the HiveMQ Root CA certificate.
+- Customer-facing credentials such as WiFi SSID, HiveMQ username, and HiveMQ password are stored securely in the ESP32's non-volatile storage and are not entered in `secrets.h`.
 
 ### Connection Check
 - If the web dashboard does not update, make sure the ESP32 is online and the device is publishing telemetry to HiveMQ.

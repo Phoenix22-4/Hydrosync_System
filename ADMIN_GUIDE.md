@@ -46,6 +46,12 @@ HydroSync is an IoT-based, dual-tank autonomous water management system engineer
                         └─────────────────┘
 ```
 
+### Mobile App and APK Flow
+- The public landing page is a marketing website that first attempts to launch the native Android app using the deep link `hydrosync://login`.
+- If the native app is not installed, the page automatically scrolls to the APK download section on the landing page.
+- The APK binary is served from `public/HydroSync-App.apk`.
+- Admin access and installation prompts are intentionally kept separate from the public marketing flow.
+
 ---
 
 ## Notification System Implementation
@@ -126,13 +132,15 @@ HydroSync is an IoT-based, dual-tank autonomous water management system engineer
 
 ### HTTP Endpoints (Internal)
 - **AI Diagnostics**: `POST /api/ai_chat` (Proxied to Gemini)
-- **Admin Verification**: `GET /setup_Adminaqua`
+- **Admin Verification**: `GET /setup_Adminhydro`
 
 ---
 
 ## Admin Portal Functionality
 
 The HydroSync Admin Portal is a centralized management interface for system administrators to oversee the entire ecosystem.
+
+> Admin access is intentionally hidden from the public landing page. The entry point is the secure route `/setup_Adminhydro`, and administrative installation prompts should only appear within the admin login workflow.
 
 ### 1. Device Management
 - **Fleet Overview**: Real-time status monitoring of all deployed ESP32 units.
@@ -201,32 +209,28 @@ Refer to the `MQTT_BRIDGE_TEMPLATE.md` file for the complete reference implement
 - `MQTT_USERNAME/PASSWORD`: Device credentials
 
 ### Firmware Provisioning and Secrets
-- The current ESP32 firmware stores WiFi and HiveMQ credentials in NVS flash on the device.
-- The file `firmware/secrets.h` now contains only the HiveMQ Root CA certificate, which is public and safe to include in firmware.
-- Device-specific secrets are not hardcoded in `secrets.h` anymore.
-- On first boot or after factory reset, the ESP32 starts the captive portal network `HydroSync_Setup` and serves the setup page at `http://192.168.4.1/`.
-- The setup portal collects:
+- The current ESP32 firmware stores customer-entered WiFi and HiveMQ credentials in NVS flash on the device.
+- `firmware/secrets.h` contains the hardcoded `DEVICE_ID`, `HIVEMQ_HOST`, and the HiveMQ Root CA certificate.
+- Customers do NOT enter or see the device ID or HiveMQ host during setup.
+- On first boot or after a factory reset, the ESP32 broadcasts the captive portal network `HydroSync_Setup` and serves the setup page at `http://192.168.4.1/`.
+- The setup portal collects only:
   - WiFi SSID
   - WiFi Password
-  - Device ID
-  - HiveMQ Host
   - HiveMQ Username
   - HiveMQ Password
-- After configuration, the device saves credentials to NVS and connects to WiFi and MQTT broker.
-- Factory reset: Hold BOOT button (GPIO 0) low to GND for 5 seconds to erase credentials and restart portal.
-- On first boot or after factory reset, the ESP32 starts the captive portal network `HydroSync_Setup` and serves the setup page at `http://192.168.4.1/`.
-- The setup portal collects:
-  - WiFi SSID
-  - WiFi Password
-  - Device ID
-  - HiveMQ Host
-  - HiveMQ Username
-  - HiveMQ Password
+- After saving, the device writes these values to NVS and then connects to the configured WiFi network and the hardcoded HiveMQ broker.
 
 ### Factory Reset
-- The factory reset button is connected to **GPIO 0**.
-- Hold the BOOT button (GPIO 0) low to GND for 5 seconds while powered on.
-- This erases saved credentials and forces the device back into captive portal setup mode.
+- The current ESP32 firmware supports a factory reset using a triple power cycle or a serial reset command.
+- Triple power-cycle reset instructions:
+  1. Power OFF the device and wait 2 seconds.
+  2. Power ON the device and wait 2 seconds.
+  3. Power OFF again and wait 2 seconds.
+  4. Power ON again and wait 2 seconds.
+  5. Power OFF once more and wait 2 seconds.
+  6. Power ON the device a final time.
+- If the firmware detects three boots in the reset window, it erases NVS credentials and re-enters captive portal mode.
+- For service or engineering access, use a USB serial monitor at 115200 baud and send the command `RESET_NVS` to erase credentials immediately.
 
 ### ESP32 → Arduino TFT Communication
 - The ESP32 communicates with the Arduino Mega/TFT display over UART Serial2.

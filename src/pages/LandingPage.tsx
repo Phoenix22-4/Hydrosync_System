@@ -61,9 +61,9 @@ export default function LandingPage() {
   };
 
   const handleLogin = () => {
-    const isNativeApp = (window as any).Capacitor !== undefined || 
+    const isNativeApp = (window as any).Capacitor !== undefined ||
                         (window as any).Android !== undefined ||
-                        (document.URL.indexOf('http://') === -1 && document.URL.indexOf('https://') === -1);
+                        !/^https?:\/\//.test(document.URL);
 
     if (isNativeApp) {
       navigate('/login');
@@ -78,27 +78,35 @@ export default function LandingPage() {
     const appScheme = 'hydrosync://login';
     let appOpened = false;
 
+    const markAppOpened = () => {
+      appOpened = true;
+    };
+
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
-        appOpened = true;
+        markAppOpened();
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pagehide', markAppOpened);
+    window.addEventListener('blur', markAppOpened);
 
-    // Attempt to open the native app.
+    // Attempt to open the native app via deep link.
     window.location.href = appScheme;
 
-    // Fallback to APK section if the app does not open.
     setTimeout(() => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pagehide', markAppOpened);
+      window.removeEventListener('blur', markAppOpened);
+
       if (!appOpened) {
         const downloadSection = document.getElementById('native-app');
         if (downloadSection) {
           downloadSection.scrollIntoView({ behavior: 'smooth' });
         }
       }
-    }, 1800);
+    }, 1600);
   };
 
   const features = [
@@ -945,7 +953,6 @@ export default function LandingPage() {
           <div className="flex items-center gap-6">
             <a href="#" className="text-slate-500 hover:text-white transition-colors">Privacy</a>
             <a href="#" className="text-slate-500 hover:text-white transition-colors">Terms</a>
-            <Link to="/setup_Adminhydro" className="text-slate-800 hover:text-slate-700 transition-colors text-[10px] font-bold uppercase tracking-widest">Admin</Link>
           </div>
         </div>
       </footer>
