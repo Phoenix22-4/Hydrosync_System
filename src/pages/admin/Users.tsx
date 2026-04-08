@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Users, Search, Filter, ShieldAlert, ShieldCheck, Trash2, Plus, Smartphone, ChevronDown, ChevronUp, Loader2, X, Copy, Check, ArrowLeft, Mail } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { initializeApp } from 'firebase/app';
-import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
+import { getAuth, createUserWithEmailAndPassword, signOut, deleteUser as deleteAuthUser } from 'firebase/auth';
 import firebaseConfig from '../../../firebase-applet-config.json';
 
 // Initialize secondary app for creating users without signing out the admin
@@ -96,6 +96,10 @@ export default function AdminUsers() {
           status: 'unassigned'
         });
       }
+      
+      // Note: Firebase Auth user deletion requires Admin SDK (server-side)
+      // This should be implemented via Cloud Functions for security
+      // For now, only Firestore data is deleted
       
       // The onSnapshot listener will automatically update the UI
     } catch (error) {

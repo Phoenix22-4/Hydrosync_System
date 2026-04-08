@@ -189,8 +189,8 @@ service cloud.firestore {
         isAdmin()
       );
       
-      // Only admins can delete users
-      allow delete: if isAdmin();
+      // Only superusers can delete users
+      allow delete: if isSuperuser();
     }
 
     match /devices/{deviceId} {
@@ -222,6 +222,9 @@ service cloud.firestore {
         resource.data.status == 'active' &&
         request.resource.data.status == 'active'
       );
+      
+      // Only superusers can delete devices
+      allow delete: if isSuperuser();
     }
 
     // Top-level telemetry collection for aggregated data
@@ -256,7 +259,7 @@ service cloud.firestore {
       allow read: if isAuthenticated() || isAdmin();
       // Allow create for authenticated users (for logging device linking, etc.)
       allow create: if isAuthenticated() || isAdmin();
-      allow update, delete: if isAdmin();
+      allow update, delete: if isSuperuser();
     }
 
     match /alerts/{alertId} {
@@ -275,7 +278,7 @@ service cloud.firestore {
         request.resource.data.type in ['new_user', 'device_added', 'new_admin'] &&
         request.resource.data.read == false
       );
-      allow delete: if isAdmin();
+      allow delete: if isSuperuser();
     }
 
     match /commands/{commandId} {
@@ -292,7 +295,7 @@ service cloud.firestore {
       // Only the bridge/admin can update command status (e.g. from 'pending' to 'completed').
       allow update: if isAdmin();
       // Commands should not be deleted by users for audit purposes.
-      allow delete: if isAdmin();
+      allow delete: if isSuperuser();
     }
 
     // Device tokens collection - for verifying device ownership
@@ -306,8 +309,8 @@ service cloud.firestore {
       // Users can update their own tokens (mark as used)
       allow update: if isAuthenticated() && 
         resource.data.user_id == request.auth.uid;
-      // Only admins can delete
-      allow delete: if isAdmin();
+      // Only superusers can delete
+      allow delete: if isSuperuser();
     }
 
     // Token requests collection - legacy for admin processing
@@ -315,13 +318,15 @@ service cloud.firestore {
       // Users can create token requests
       allow create: if isAuthenticated();
       // Only admins can read/update/delete
-      allow read, update, delete: if isAdmin();
+      allow read, update, delete: if isSuperuser();
     }
 
     // MQTT hosts collection - for managing broker URLs
     match /mqtt_hosts/{hostId} {
       // Admins can manage MQTT hosts
       allow read, write: if isAdmin();
+      // Only superusers can delete MQTT hosts
+      allow delete: if isSuperuser();
     }
 
 

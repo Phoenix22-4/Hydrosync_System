@@ -33,6 +33,14 @@ export default function Alerts() {
     }
   };
 
+  const markAsUnread = async (id: string) => {
+    try {
+      await updateDoc(doc(db, 'alerts', id), { read: false });
+    } catch (error) {
+      console.error("Error marking alert as unread:", error);
+    }
+  };
+
   const deleteAlert = async (id: string) => {
     try {
       await deleteDoc(doc(db, 'alerts', id));
@@ -121,12 +129,21 @@ export default function Alerts() {
                         {alert.device_id} • {alert.triggered_at?.toDate().toLocaleString() || 'Just now'}
                       </p>
                     </div>
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); deleteAlert(alert.id); }}
-                      className="p-2 bg-white/5 text-slate-600 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all opacity-0 group-hover:opacity-100"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); markAsUnread(alert.id); }}
+                        className="p-2 bg-white/5 text-slate-600 hover:text-orange-500 hover:bg-orange-500/10 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                        title="Mark as unread"
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); deleteAlert(alert.id); }}
+                        className="p-2 bg-white/5 text-slate-600 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 </motion.div>
               ))}

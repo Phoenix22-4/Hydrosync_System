@@ -5,7 +5,7 @@ import { db } from '../../firebase';
 import { useAuth } from '../../App';
 import { Alert } from '../../types';
 import { motion } from 'motion/react';
-import { Bell, Search, Filter, Trash2, CheckCircle2, Loader2, ArrowLeft } from 'lucide-react';
+import { Bell, Search, Filter, Trash2, CheckCircle2, Loader2, ArrowLeft, Circle } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 export default function AdminAlerts() {
@@ -31,6 +31,14 @@ export default function AdminAlerts() {
       await Promise.all(unread.map(a => updateDoc(doc(db, 'alerts', a.id), { read: true })));
     } catch (error) {
       console.error("Error marking alerts as read:", error);
+    }
+  };
+
+  const markAsUnread = async (id: string) => {
+    try {
+      await updateDoc(doc(db, 'alerts', id), { read: false });
+    } catch (error) {
+      console.error("Error marking alert as unread:", error);
     }
   };
 
@@ -134,6 +142,15 @@ export default function AdminAlerts() {
                         title="Mark as read"
                       >
                         <CheckCircle2 className="w-4 h-4" />
+                      </button>
+                    )}
+                    {a.read && (
+                      <button 
+                        onClick={() => markAsUnread(a.id)}
+                        className="p-2 bg-slate-800 text-slate-500 hover:bg-orange-500/10 hover:text-orange-500 rounded-lg transition-all"
+                        title="Mark as unread"
+                      >
+                        <Circle className="w-4 h-4" />
                       </button>
                     )}
                     <button 

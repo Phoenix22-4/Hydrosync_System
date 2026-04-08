@@ -18,8 +18,26 @@ export default function AdminSettings() {
   const [activeSection, setActiveSection] = useState<'account' | 'notifications' | 'system' | 'mqtt' | 'data' | null>('account');
   const [mqttHosts, setMqttHosts] = useState<Array<{id: string, url: string, status: 'active' | 'inactive'}>>([]);
   const [newHostUrl, setNewHostUrl] = useState('');
-  const [editingHost, setEditingHost] = useState<string | null>(null);
-  const [editUrl, setEditUrl] = useState('');
+  const [notificationSettings, setNotificationSettings] = useState({
+    emailAlerts: true,
+    pushNotifications: true,
+    dailySummary: false,
+    dryRunAlerts: true
+  });
+
+  useEffect(() => {
+    // Load notification settings from localStorage
+    const saved = localStorage.getItem('admin_notifications');
+    if (saved) {
+      setNotificationSettings(JSON.parse(saved));
+    }
+  }, []);
+
+  const updateNotificationSetting = (key: string, value: boolean) => {
+    const newSettings = { ...notificationSettings, [key]: value };
+    setNotificationSettings(newSettings);
+    localStorage.setItem('admin_notifications', JSON.stringify(newSettings));
+  };
 
   useEffect(() => {
     if (activeSection === 'mqtt') {
@@ -89,22 +107,91 @@ export default function AdminSettings() {
     }
   };
 
-  const handleLogout = async () => {
-    setLoading(true);
+  const exportAllData = async () => {
     try {
-      await auth.signOut();
-      navigate('/admin-login', { replace: true });
+      setLoading(true);
+      // Export all collections except users
+      const collections = ['devices', 'mqtt_hosts', 'email_tokens'];
+      const exportData: any = {};
+
+      for (const coll of collections) {
+        const snapshot = await getDocs(collection(db, coll));
+        exportData[coll] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      }
+
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `hydrosync_backup_${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
     } catch (error) {
-      console.error("Logout error:", error);
+      console.error('Error exporting data:', error);
+      alert('Failed to export data');
     } finally {
       setLoading(false);
     }
   };
 
+  const backupDatabase = async () => {
+    // Same as export for now
+    await exportAllData();
+  };
+
+  const clearAllTelemetry = async () => {
+    if (!confirm('Are you sure you want to clear all telemetry data? This cannot be undone.')) return;
+    try {
+      setLoading(true);
+      const devicesSnapshot = await getDocs(collection(db, 'devices'));
+      for (const deviceDoc of devicesSnapshot.docs) {
+        const historyRef = collection(db, 'devices', deviceDoc.id, 'history');
+        const historySnapshot = await getDocs(historyRef);
+        const deletePromises = historySnapshot.docs.map(doc => deleteDoc(doc.ref));
+        await Promise.all(deletePromises);
+      }
+      alert('All telemetry data cleared successfully');
+    } catch (error) {
+      console.error('Error clearing telemetry:', error);
+      alert('Failed to clear telemetry data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resetSystem = async () => {
+    if (!confirm('Are you sure you want to reset the system? This will delete all data except users. This cannot be undone.')) return;
+    try {
+      setLoading(true);
+      // Delete all collections except users
+      const collections = ['devices', 'mqtt_hosts', 'email_tokens'];
+      for (const coll of collections) {
+        const snapshot = await getDocs(collection(db, coll));
+        const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref));
+        await Promise.all(deletePromises);
+      }
+      alert('System reset successfully');
+    } catch (error) {
+      console.error('Error resetting system:', error);
+      alert('Failed to reset system');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteAllData = async () => {
+    if (profile?.role !== 'superuser') {
+      alert('Only superusers can perform this action');
+      return;
+    }
+    if (!confirm('SUPERUSER ACTION: Are you sure you want to delete ALL data except users? This cannot be undone.')) return;
+    await resetSystem();
+  };
+
   const settingsSections = [
     { id: 'account', label: 'Account', icon: <User className="w-4 h-4" />, desc: 'Profile, security, and login settings' },
     { id: 'notifications', label: 'Notifications', icon: <Bell className="w-4 h-4" />, desc: 'Alert and notification preferences' },
-    { id: 'system', label: 'System', icon: <Database className="w-4 h-4" />, desc: 'Bridge status, simulation controls' },
+    { id: 'system', label: 'System', icon: <Database className="w-4 h-4" />, desc: 'Bridge status and system controls' },
     { id: 'mqtt', label: 'MQTT Hosts', icon: <Globe className="w-4 h-4" />, desc: 'Manage HiveMQ broker URLs' },
     { id: 'data', label: 'Data Management', icon: <RefreshCw className="w-4 h-4" />, desc: 'Export, backup, and reset options' },
   ];
@@ -224,10 +311,30 @@ export default function AdminSettings() {
                   </h3>
                 </div>
                 <div className="p-6 space-y-4">
-                  <ToggleSetting label="Email Alerts" desc="Receive email notifications for critical alerts" defaultChecked />
-                  <ToggleSetting label="Push Notifications" desc="Browser push notifications for device status changes" defaultChecked />
-                  <ToggleSetting label="Daily Summary" desc="Receive a daily digest of system activity" />
-                  <ToggleSetting label="Dry Run Alerts" desc="Immediate notification when pump runs dry" defaultChecked />
+                  <ToggleSetting 
+                    label="Email Alerts" 
+                    desc="Receive email notifications for critical alerts" 
+                    checked={notificationSettings.emailAlerts}
+                    onChange={(checked) => updateNotificationSetting('emailAlerts', checked)}
+                  />
+                  <ToggleSetting 
+                    label="Push Notifications" 
+                    desc="Browser push notifications for device status changes" 
+                    checked={notificationSettings.pushNotifications}
+                    onChange={(checked) => updateNotificationSetting('pushNotifications', checked)}
+                  />
+                  <ToggleSetting 
+                    label="Daily Summary" 
+                    desc="Receive a daily digest of system activity" 
+                    checked={notificationSettings.dailySummary}
+                    onChange={(checked) => updateNotificationSetting('dailySummary', checked)}
+                  />
+                  <ToggleSetting 
+                    label="Dry Run Alerts" 
+                    desc="Immediate notification when pump runs dry" 
+                    checked={notificationSettings.dryRunAlerts}
+                    onChange={(checked) => updateNotificationSetting('dryRunAlerts', checked)}
+                  />
                 </div>
               </motion.div>
             )}
@@ -247,13 +354,12 @@ export default function AdminSettings() {
                   </h3>
                 </div>
                 <div className="p-6 space-y-4">
-                  <SettingsItem icon={<Globe className="w-4 h-4" />} label="MQTT Broker" value="mqtt.hydrosync.io" />
+                  <SettingsItem icon={<Globe className="w-4 h-4" />} label="MQTT Broker" value="https://www.hivemq.com/mqtt-cloud-broker/" />
                   <SettingsItem icon={<Clock className="w-4 h-4" />} label="Heartbeat Interval" value="30 seconds" />
                   <SettingsItem icon={<Volume2 className="w-4 h-4" />} label="Voltage Standard" value="240V AC" />
-                  <SettingsItem icon={<Moon className="w-4 h-4" />} label="Simulation Mode" value="Active" badge />
                   
                   <div className="pt-4 border-t border-white/5">
-                    <SettingsButton icon={<RefreshCw className="w-4 h-4" />} label="Restart Simulation" onClick={() => window.location.reload()} />
+                    <SettingsButton icon={<RefreshCw className="w-4 h-4" />} label="Restart System" onClick={() => window.location.reload()} />
                   </div>
                 </div>
               </motion.div>
@@ -411,8 +517,8 @@ export default function AdminSettings() {
                   </h3>
                 </div>
                 <div className="p-6 space-y-4">
-                  <SettingsButton icon={<Download className="w-4 h-4" />} label="Export All Data" desc="Download complete system data as JSON" onClick={() => {}} />
-                  <SettingsButton icon={<Database className="w-4 h-4" />} label="Backup Database" desc="Create a backup of all Firestore collections" onClick={() => {}} />
+                  <SettingsButton icon={<Download className="w-4 h-4" />} label="Export All Data" desc="Download complete system data as JSON" onClick={exportAllData} loading={loading} />
+                  <SettingsButton icon={<Database className="w-4 h-4" />} label="Backup Database" desc="Create a backup of all Firestore collections" onClick={backupDatabase} loading={loading} />
                   
                   <div className="pt-4 border-t border-white/5">
                     <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
@@ -424,8 +530,11 @@ export default function AdminSettings() {
                         </div>
                       </div>
                       <div className="mt-4 space-y-2">
-                        <SettingsButton icon={<Trash2 className="w-4 h-4" />} label="Clear All Telemetry" danger onClick={() => {}} />
-                        <SettingsButton icon={<Trash2 className="w-4 h-4" />} label="Reset System" danger onClick={() => {}} />
+                        <SettingsButton icon={<Trash2 className="w-4 h-4" />} label="Clear All Telemetry" danger onClick={clearAllTelemetry} loading={loading} />
+                        <SettingsButton icon={<Trash2 className="w-4 h-4" />} label="Reset System" danger onClick={resetSystem} loading={loading} />
+                        {profile?.role === 'superuser' && (
+                          <SettingsButton icon={<Trash2 className="w-4 h-4" />} label="Delete All Data (Superuser)" danger onClick={deleteAllData} loading={loading} />
+                        )}
                       </div>
                     </div>
                   </div>
@@ -484,9 +593,7 @@ function SettingsButton({ icon, label, desc, danger, loading, onClick }: { icon:
   );
 }
 
-function ToggleSetting({ label, desc, defaultChecked }: { label: string; desc: string; defaultChecked?: boolean }) {
-  const [enabled, setEnabled] = useState(defaultChecked || false);
-  
+function ToggleSetting({ label, desc, checked, onChange }: { label: string; desc: string; checked: boolean; onChange: (checked: boolean) => void }) {
   return (
     <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl">
       <div>
@@ -494,15 +601,15 @@ function ToggleSetting({ label, desc, defaultChecked }: { label: string; desc: s
         <p className="text-[10px] text-slate-500 mt-0.5">{desc}</p>
       </div>
       <button
-        onClick={() => setEnabled(!enabled)}
+        onClick={() => onChange(!checked)}
         className={cn(
           "w-12 h-6 rounded-full transition-colors relative",
-          enabled ? "bg-cyan-500" : "bg-slate-700"
+          checked ? "bg-cyan-500" : "bg-slate-700"
         )}
       >
         <div className={cn(
           "w-5 h-5 rounded-full bg-white absolute top-0.5 transition-transform",
-          enabled ? "translate-x-6" : "translate-x-0.5"
+          checked ? "translate-x-6" : "translate-x-0.5"
         )} />
       </button>
     </div>

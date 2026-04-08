@@ -14,7 +14,7 @@ import { Device, Telemetry, ActivityLog } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Settings, BarChart2, Bell, Play, Square,
-  RotateCcw, Loader2, AlertTriangle, Plus,
+  Loader2, AlertTriangle, Plus, RefreshCw,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import TankScene from '../components/TankScene';
@@ -38,7 +38,6 @@ export default function Dashboard() {
   const [setupLoading, setSetupLoading] = useState(false);
   const [unreadAlerts, setUnreadAlerts] = useState(0);
   const [isOffline, setIsOffline]       = useState(false);
-  const [isSimulating, setIsSimulating] = useState(false);
   const [isInternetOffline, setIsInternetOffline] = useState(!navigator.onLine);
 
   useEffect(() => {
@@ -377,7 +376,7 @@ export default function Dashboard() {
             onClick={createDemoDevice}
             className="w-full px-8 py-3 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-2"
           >
-            <RotateCcw className="w-4 h-4" />
+            <Plus className="w-4 h-4" />
             Create Demo Device
           </button>
         </div>
@@ -411,33 +410,18 @@ export default function Dashboard() {
         </div>
         {/* Header actions */}
         <div className="flex items-center gap-2">
-          {/* Simulate button */}
-          <button
-            type="button"
-            onClick={() => setIsSimulating(!isSimulating)}
-            className={cn(
-              'flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all',
-              isSimulating
-                ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
-                : 'bg-white/5 text-slate-400 border border-white/10 hover:text-white hover:bg-white/10'
-            )}
-          >
-            <RotateCcw className={cn('w-3 h-3', isSimulating && 'animate-spin')} />
-            {isSimulating ? 'Simulating' : 'Simulate'}
-          </button>
-
           {/* Status badge */}
           <div
             className={cn(
               'flex items-center gap-2 px-3 py-1.5 rounded-full border transition-colors',
-              isOffline && !isSimulating
+              isOffline
                 ? 'bg-red-500/10 border-red-500/20 text-red-500'
                 : 'bg-green-500/10 border-green-500/20 text-green-500'
             )}
           >
-            <div className={cn('w-2 h-2 rounded-full', isOffline && !isSimulating ? 'bg-red-500' : 'bg-green-500 animate-pulse')} />
+            <div className={cn('w-2 h-2 rounded-full', isOffline ? 'bg-red-500' : 'bg-green-500 animate-pulse')} />
             <span className="text-[10px] font-bold uppercase tracking-widest">
-              {isOffline && !isSimulating ? 'Offline' : 'Live'}
+              {isOffline ? 'Offline' : 'Live'}
             </span>
           </div>
         </div>
@@ -636,7 +620,7 @@ export default function Dashboard() {
                   onClick={() => sendCommand('RESET_ERROR')}
                   className="flex flex-col items-center justify-center gap-1 p-3 bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/20 rounded-xl transition-all active:scale-95 cursor-pointer"
                 >
-                  <RotateCcw className="w-4 h-4 text-orange-500" />
+                  <RefreshCw className="w-4 h-4 text-orange-500" />
                   <span className="text-[10px] font-bold text-orange-500 uppercase">Reset</span>
                 </button>
               </div>
