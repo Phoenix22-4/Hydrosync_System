@@ -9,3 +9,6 @@ coverage/
 
 # ESP32 Firmware - Keep in repo but exclude from app builds
 firmware/
+
+# APK files - Generated during build, not committed to repo
+*.apk
