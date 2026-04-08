@@ -56,7 +56,21 @@ export default function Dashboard() {
         try {
           const payload = JSON.parse(message.toString());
 
-          if (topic === `devices/${activeDevice?.id}/data`) {
+          // Security: Only accept messages for owned devices
+          const isAuthorizedTopic = devices.some(device =>
+            topic.startsWith(`devices/${device.id}/`) && device.assigned_to_user === user?.uid
+          );
+
+          if (!isAuthorizedTopic) {
+            console.warn('MQTT: Received message for unauthorized device/topic:', topic);
+            return;
+          }
+
+          // Find which device this message is for
+          const targetDevice = devices.find(device => topic.startsWith(`devices/${device.id}/`));
+          if (!targetDevice) return;
+
+          if (topic === `devices/${targetDevice.id}/data`) {
             // Update telemetry with live data
             setTelemetry({
               recorded_at: serverTimestamp() as any,
