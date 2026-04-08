@@ -12,5 +12,9 @@ coverage/
 android/.idea/
 gradle-8.14.3-all.zip
 
-# ESP32 & Arduino Firmware - not deployed to hosting sites
+# Firmware folder tracked in Git but excluded from web app builds & hosting
+# Keep firmware/ in Git for version control, but don't deploy to web hosting
 firmware/
+!firmware/
+!firmware/**/*.ino
+!firmware/**/*.h
