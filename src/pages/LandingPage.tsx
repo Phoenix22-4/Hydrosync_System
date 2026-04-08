@@ -61,57 +61,44 @@ export default function LandingPage() {
   };
 
   const handleLogin = () => {
-    // Check if we're already in the native app (Capacitor/Android)
     const isNativeApp = (window as any).Capacitor !== undefined || 
                         (window as any).Android !== undefined ||
                         (document.URL.indexOf('http://') === -1 && document.URL.indexOf('https://') === -1);
-    
+
     if (isNativeApp) {
-      // Already in native app, navigate to login page
       navigate('/login');
       return;
     }
-    
-    // Check if online before attempting app opening
+
     if (!navigator.onLine) {
       navigate('/access-denied');
       return;
     }
-    
-    // Try to open the native app using custom URL scheme
+
     const appScheme = 'hydrosync://login';
-    const startTime = Date.now();
     let appOpened = false;
-    
-    // Try to open the app
-    window.location.href = appScheme;
-    
-    // Check if app opened by monitoring visibility change
-    const checkAppOpened = () => {
-      // If we're still here after 2 seconds, the app probably didn't open
-      if (Date.now() - startTime > 2000 && !appOpened && document.visibilityState === 'visible') {
-        // App didn't open, scroll to download section
-        const downloadSection = document.getElementById('native-app');
-        if (downloadSection) {
-          downloadSection.scrollIntoView({ behavior: 'smooth' });
-        }
-      }
-    };
-    
-    // Listen for visibility change (app opens = browser loses focus)
+
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
         appOpened = true;
       }
     };
-    
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    // Fallback check after 2.5 seconds
+
+    // Attempt to open the native app.
+    window.location.href = appScheme;
+
+    // Fallback to APK section if the app does not open.
     setTimeout(() => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      checkAppOpened();
-    }, 2500);
+      if (!appOpened) {
+        const downloadSection = document.getElementById('native-app');
+        if (downloadSection) {
+          downloadSection.scrollIntoView({ behavior: 'smooth' });
+        }
+      }
+    }, 1800);
   };
 
   const features = [
@@ -266,7 +253,7 @@ export default function LandingPage() {
               className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-2"
             >
               <LogIn className="w-4 h-4" />
-              <span>Login</span>
+              <span>Open App</span>
             </button>
           </div>
 
