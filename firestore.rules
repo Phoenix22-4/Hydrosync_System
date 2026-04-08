@@ -95,19 +95,21 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    function isAdmin() {
-      return isAuthenticated() && (
-        request.auth.token.email == "visiontech072025@gmail.com" ||
-        request.auth.token.email == "htmlfirephoenix@gmail.com" ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'superuser'))
-      );
+    // Regular admin: can read and write, but not destructive operations
+    function isRegularAdmin() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
     // Superuser has full control - only visiontech072025@gmail.com
     function isSuperuser() {
       return isAuthenticated() && request.auth.token.email == "visiontech072025@gmail.com";
+    }
+
+    // Admin includes both regular admins and superuser for read/write operations
+    function isAdmin() {
+      return isRegularAdmin() || isSuperuser();
     }
 
     function isValidEmail(email) {
