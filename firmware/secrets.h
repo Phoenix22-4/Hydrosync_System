@@ -2,51 +2,96 @@
 
 // =================================================================
 //   HydroSync — secrets.h
-//   Version 3.0
-// =================================================================
+//   Version 3.1
 //
-//   WHAT THIS FILE NOW CONTAINS:
+//   WHAT IS IN THIS FILE:
 //   ─────────────────────────────────────────────────────────────
-//   ONLY the HiveMQ Root CA certificate.
+//   ✓ DEVICE_ID       — hardcoded, unique per physical unit
+//   ✓ HIVEMQ_HOST     — hardcoded, same for all units on your cluster
+//   ✓ HIVEMQ_ROOT_CA  — hardcoded, same for all units (public cert)
 //
-//   WiFi SSID, WiFi Password, Device ID, HiveMQ Host,
-//   HiveMQ Username, and HiveMQ Password are NO LONGER HERE.
+//   WHAT IS NOT IN THIS FILE (customer enters these via portal):
+//   ✗ WiFi SSID        — saved to NVS by customer
+//   ✗ WiFi Password    — saved to NVS by customer
+//   ✗ HiveMQ Username  — saved to NVS by customer
+//   ✗ HiveMQ Password  — saved to NVS by customer
 //
-//   They are entered ONCE by the customer through the captive
-//   portal setup page and stored permanently in the ESP32's
-//   NVS (non-volatile flash storage). They survive reboots,
-//   power cuts, and firmware updates.
-//
-//   WHY THE CERTIFICATE IS STILL HERE (and that is OK):
+//   BEFORE FLASHING EACH NEW DEVICE:
 //   ─────────────────────────────────────────────────────────────
-//   The HIVEMQ_ROOT_CA certificate is NOT a secret.
-//   It is the ISRG Root X1 certificate — a public certificate
-//   from Let's Encrypt that is identical on every HiveMQ Cloud
-//   cluster in the world.
+//   1. Change DEVICE_ID to the new device's unique ID
+//      Examples:
+//        "HydroSync_001"   (for first customer's first device)
+//        "HydroSync_002"   (for second customer or second device)
+//        "HydroSync_JK_01" (for customer with initials JK)
 //
-//   It does NOT identify your device or your account.
-//   It only tells the ESP32 "trust servers signed by Let's Encrypt".
+//   2. HIVEMQ_HOST stays the same for ALL devices on your cluster.
+//      Only change it if you move to a different HiveMQ cluster.
 //
-//   Sharing it publicly is completely safe. It cannot be used
-//   to connect to your HiveMQ cluster — for that you still need
-//   the username and password (which are now stored in NVS,
-//   not in this file).
+//   3. Flash the firmware to the ESP32.
 //
-//   HOW TO FACTORY RESET A DEVICE:
+//   4. Ship the device with a card showing:
+//        "Device ID: HydroSync_001"         (for your reference)
+//        "HiveMQ Username: hydrosync_001"   (customer enters this)
+//        "HiveMQ Password: [their password]"(customer enters this)
+//
+//   WHY DEVICE_ID IS HARDCODED AND NOT CUSTOMER-ENTERED:
 //   ─────────────────────────────────────────────────────────────
-//   Hold the BOOT button (GPIO 0) for 5 seconds while powered on.
-//   The device will erase all saved credentials and restart in
-//   setup mode (broadcasting "HydroSync_Setup" WiFi network).
+//   • It defines which MQTT topics this device publishes to.
+//     If the customer could change it, they could accidentally
+//     publish to another customer's topic — data collision.
+//   • It is the MQTT Client ID. HiveMQ rejects two connections
+//     with the same client ID. You control uniqueness by flashing.
+//   • It links the device to your backend database and billing.
+//     Customer should have no way to change it.
+//
+//   WHY HIVEMQ_HOST IS HARDCODED:
+//   ─────────────────────────────────────────────────────────────
+//   • All your devices connect to the same HiveMQ cluster.
+//   • The cluster hostname never changes once set up.
+//   • Customers should not be able to redirect your device to a
+//     different MQTT broker.
 //
 // =================================================================
 
 
 // =================================================================
-// HiveMQ TLS Root Certificate (ISRG Root X1 — Let's Encrypt)
-// This is the SAME certificate for ALL HydroSync devices.
-// It is public information and safe to include in firmware.
-// Last verified valid: 2024. Expires: 2035.
+// 1. DEVICE IDENTITY — CHANGE THIS FOR EACH PHYSICAL UNIT
 // =================================================================
+//
+// Format rule: only letters, numbers, and underscores. No spaces.
+// This must EXACTLY match the MQTT credential you created in HiveMQ
+// console for this device (used as the MQTT Client ID).
+//
+#define DEVICE_ID    "HydroSync_01"
+//                    ▲ Change this before flashing each device
+
+
+// =================================================================
+// 2. HIVEMQ CLUSTER HOST — SAME FOR ALL DEVICES
+// =================================================================
+//
+// Found in: HiveMQ Cloud console → your cluster → Cluster Details
+// Format:   "xxxxxxxxxxxxxxxxxxxxxxxx.s1.eu.hivemq.cloud"
+// DO NOT include "mqtt://" or "wss://" — just the hostname.
+//
+#define HIVEMQ_HOST  "70f11a2fa15842628bf9227997bb4ba9.s1.eu.hivemq.cloud"
+//                    ▲ Same for all your devices. Only change if
+//                      you migrate to a different HiveMQ cluster.
+
+
+// =================================================================
+// 3. HIVEMQ TLS ROOT CERTIFICATE (ISRG Root X1 — Let's Encrypt)
+// =================================================================
+//
+// This is a PUBLIC certificate. It is safe to include in firmware.
+// It is IDENTICAL for every HiveMQ Cloud cluster in the world.
+// It tells the ESP32 to trust servers signed by Let's Encrypt.
+//
+// It does NOT grant access to your cluster — that requires the
+// HiveMQ username and password (entered by customer in portal).
+//
+// Valid until: June 2035. No need to update before then.
+//
 static const char HIVEMQ_ROOT_CA[] PROGMEM = R"EOF(
 -----BEGIN CERTIFICATE-----
 MIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRnXxCGmacTACCgYIKoZIzj0EAwIwRzEL

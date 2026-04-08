@@ -32,11 +32,25 @@ export default function LandingPage() {
   const [isScrolled, setIsScrolled] = useState(false);
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('hardware');
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 20);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
   }, []);
 
   const handleGetStarted = () => {
@@ -55,6 +69,12 @@ export default function LandingPage() {
     if (isNativeApp) {
       // Already in native app, navigate to login page
       navigate('/login');
+      return;
+    }
+    
+    // Check if online before attempting app opening
+    if (!navigator.onLine) {
+      navigate('/access-denied');
       return;
     }
     
@@ -168,6 +188,48 @@ export default function LandingPage() {
       image: "https://picsum.photos/seed/moses/400/400"
     }
   ];
+
+  // Offline Detection Component
+  if (!isOnline) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen p-6 bg-[#0f172a] relative">
+        <div className="absolute top-8 left-8">
+          <button 
+            onClick={() => window.location.reload()}
+            className="flex items-center gap-2 text-slate-500 hover:text-white transition-colors group"
+          >
+            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform rotate-180" />
+            <span className="text-xs font-bold uppercase tracking-widest">Refresh</span>
+          </button>
+        </div>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="w-full max-w-md p-8 bg-[#1e293b] rounded-2xl border border-red-500/20 shadow-2xl text-center"
+        >
+          <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Wifi className="w-10 h-10 text-red-500" />
+          </div>
+          <h2 className="text-2xl font-bold text-white mb-2">No Internet Connection</h2>
+          <p className="text-slate-400 mb-8 leading-relaxed">
+            HydroSync requires an internet connection to function properly. Please check your connection and try again.
+          </p>
+          <div className="space-y-3">
+            <button
+              onClick={() => window.location.reload()}
+              className="w-full py-4 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 rounded-xl font-bold text-white shadow-lg shadow-cyan-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+            >
+              <Activity className="w-5 h-5" />
+              Retry Connection
+            </button>
+            <p className="text-[10px] text-slate-500 uppercase tracking-widest">
+              Auto-retry when connection is restored
+            </p>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#050b1a] text-slate-200 selection:bg-cyan-500/30 overflow-x-hidden relative">

@@ -19,7 +19,11 @@ const config: CapacitorConfig = {
       launchShowDuration: 2000,
       backgroundColor: '#050b1a'
     }
-  }
+  },
+  ios: {},
+  web: {},
+  bundledWebRuntime: false,
+  icon: 'public/icon.png'
 };
 
 export default config;

@@ -200,6 +200,40 @@ Refer to the `MQTT_BRIDGE_TEMPLATE.md` file for the complete reference implement
 - `MQTT_BROKER_URL`: HiveMQ Cluster address
 - `MQTT_USERNAME/PASSWORD`: Device credentials
 
+### Firmware Provisioning and Secrets
+- The current ESP32 firmware stores WiFi and HiveMQ credentials in NVS flash on the device.
+- The file `firmware/secrets.h` now contains only the HiveMQ Root CA certificate, which is public and safe to include in firmware.
+- Device-specific secrets are not hardcoded in `secrets.h` anymore.
+- On first boot or after factory reset, the ESP32 starts the captive portal network `HydroSync_Setup` and serves the setup page at `http://192.168.4.1/`.
+- The setup portal collects:
+  - WiFi SSID
+  - WiFi Password
+  - Device ID
+  - HiveMQ Host
+  - HiveMQ Username
+  - HiveMQ Password
+
+### Factory Reset
+- The factory reset button is connected to **GPIO 0**.
+- Hold the BOOT button (GPIO 0) low to GND for 5 seconds while powered on.
+- This erases saved credentials and forces the device back into captive portal setup mode.
+
+### ESP32 → Arduino TFT Communication
+- The ESP32 communicates with the Arduino Mega/TFT display over UART Serial2.
+- The firmware uses **GPIO16** and **GPIO17** for this serial link.
+- This connection delivers tank telemetry and pump status to the display controller.
+- Verify the wiring if the TFT does not show updated readings after device startup.
+
+### Gemini API and Deployment
+- Set `GEMINI_API_KEY` in your local `.env.local` file with your Google Gemini key.
+- Set `APP_URL` to the deployed web app URL used by your hosting environment.
+- Example `.env.local`:
+```
+GEMINI_API_KEY="AIzaSyDZ3lsOhZ4HRY9JmZlgulOjRrZ5KYZWdpk"
+APP_URL="https://your-app-url.example"
+```
+- Do not commit `.env.local` to source control.
+
 ---
 
 ## Deployment Guide

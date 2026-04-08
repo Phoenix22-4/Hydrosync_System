@@ -223,14 +223,48 @@ HydroSync provides comprehensive notifications for all critical system events. N
 3. Click **"Copy"** to copy the token to your clipboard
 4. Click **"I have copied my token — Enter it"** to continue
 
-#### Step 4: Paste and Verify Token
-1. Paste the token you copied into the verification field
-2. Click **"Verify Token"**
-3. Your device is now linked to your account!
+#### Step 4: Firmware and Device Connectivity
+- The current ESP32 firmware version stores WiFi and HiveMQ credentials in the ESP32's flash memory (NVS). This means you only need to configure the device once using the captive portal.
+- When the device powers on without saved credentials or after a factory reset, it starts the WiFi network: `HydroSync_Setup`.
+- Connect your phone to `HydroSync_Setup` and open `http://192.168.4.1/` if the portal page does not appear automatically.
+- The portal form requires:
+  - WiFi SSID
+  - WiFi Password
+  - Device ID
+  - HiveMQ Host
+  - HiveMQ Username
+  - HiveMQ Password
+- After saving, the device reboots and reconnects automatically to your WiFi and HiveMQ cloud.
+- A solid green LED means the device is connected and running normally.
 
-#### Step 5: Device Linked!
-- Your device is now linked to your account
-- You can rename it and set tank capacities in Settings
+#### Step 5: Arduino TFT Display Connection
+- The ESP32 sends telemetry data to the Arduino/TFT display using UART Serial2.
+- The firmware uses **GPIO16** and **GPIO17** for this communication link.
+- The Arduino TFT display should show overhead/underground tank levels, pump status, and system health after the device starts.
+- If the display remains blank, verify the Serial2 wiring and the Arduino board power.
+
+#### Step 6: Factory Reset
+- Hold the BOOT button (GPIO 0) to GND for at least 5 seconds while the device is powered on.
+- This erases saved credentials and restarts the device in setup mode.
+- After reset, reconnect to `HydroSync_Setup` and reconfigure the device.
+
+### .env.local and API Configuration
+- Your web app uses a local environment file named `.env.local`.
+- It must contain the Gemini API key and the app's deployed URL.
+- Example:
+```
+GEMINI_API_KEY="AIzaSyDZ3lsOhZ4HRY9JmZlgulOjRrZ5KYZWdpk"
+APP_URL="https://your-app-url.example"
+```
+- Keep `.env.local` private and do not commit it to GitHub.
+
+### Important Security Note
+- The file `firmware/secrets.h` now contains only the HiveMQ Root CA certificate.
+- Your WiFi SSID, HiveMQ host, username, and password are saved securely in the ESP32's non-volatile storage and are not stored in this file.
+
+### Connection Check
+- If the web dashboard does not update, make sure the ESP32 is online and the device is publishing telemetry to HiveMQ.
+- If the Arduino TFT does not show data, make sure the Serial2 TX/RX pins are correctly connected and the Arduino is powered.
 
 ### Troubleshooting Device Setup
 

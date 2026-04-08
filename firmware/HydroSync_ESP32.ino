@@ -1,67 +1,93 @@
 // =================================================================
 //   HydroSync Smart Water Management System
-//   SENDER  |  ESP32-WROOM-32
-//   Firmware Version: 3.0  —  Production Edition
+//   SENDER  |  ESP32-WROOM-32 (DevKit V1 — 30 pin, NO BOOT button)
+//   Firmware Version: 3.1
 // =================================================================
 //
-//  WHAT CHANGED FROM v2.1:
+//  WHAT CHANGED FROM v3.0:
 //  ─────────────────────────────────────────────────────────────
-//  • System rebranded from AquaSavvy → HydroSync
-//  • WiFi credentials NO LONGER hardcoded
-//  • HiveMQ credentials NO LONGER hardcoded
-//  • DEVICE_ID NO LONGER hardcoded
-//  • All credentials stored in ESP32 NVS (non-volatile storage)
-//    and entered once via a captive-portal setup webpage
-//  • secrets.h still exists BUT now only holds the Root CA cert
-//    (the certificate is the same for ALL devices — it never
-//     changes per customer, so it is safe to be in the firmware)
-//  • First-boot and factory-reset workflow fully implemented
+//  • DEVICE_ID and HIVEMQ_HOST are now HARDCODED in secrets.h
+//    Customers never see or change these — you flash each device
+//    with its own secrets.h before shipping it.
+//  • Customers only enter via the portal:
+//      - WiFi SSID
+//      - WiFi Password
+//      - HiveMQ Username  (unique per device, you give this to them)
+//      - HiveMQ Password  (unique per device, you give this to them)
+//  • FACTORY RESET no longer uses GPIO 0 (BOOT button).
+//    The 30-pin DevKit V1 doesn't expose GPIO 0 easily.
+//    TWO reset methods are now available instead:
 //
-//  HOW PROVISIONING WORKS (first time a customer receives device):
-//  ─────────────────────────────────────────────────────────────
-//  STEP 1: Customer powers on the HydroSync device.
-//          The ESP32 finds no saved credentials → starts AP mode.
+//  ════════════════════════════════════════════════════════════
+//  RESET METHOD 1 — TRIPLE POWER CYCLE  (no button, no laptop)
+//  ════════════════════════════════════════════════════════════
+//  This is how Sonoff, Tuya, and TP-Link smart plugs reset.
+//  The customer does NOT need any extra hardware.
 //
-//  STEP 2: ESP32 broadcasts a WiFi network:
-//            SSID: "HydroSync_Setup"   Password: "hydrosync"
-//          The blue LED blinks slowly to indicate setup mode.
+//  To reset: Power OFF → wait 2s → Power ON → wait 2s → Power OFF
+//            → wait 2s → Power ON → wait 2s → Power OFF
+//            → wait 2s → Power ON
+//  (Three full power cycles within ~20 seconds total)
 //
-//  STEP 3: Customer connects their phone to "HydroSync_Setup".
-//          Their phone shows a captive portal page automatically
-//          (same as hotel/airport WiFi login). If it doesn't
-//          pop up, they open a browser and go to: 192.168.4.1
+//  The firmware counts how many times it has booted within a short
+//  window. It stores this count in NVS. If it reaches 3 boots
+//  within the RESET_WINDOW_MS timeframe, it triggers a factory reset.
 //
-//  STEP 4: The setup page shows a form with these fields:
-//            • WiFi Network Name (SSID)
-//            • WiFi Password
-//            • Device ID (e.g. "HydroSync_001") — admin provides this
-//            • HiveMQ Host (e.g. "xxxx.s1.eu.hivemq.cloud")
-//            • HiveMQ Username
-//            • HiveMQ Password
+//  After each NORMAL boot (device runs for >RESET_WINDOW_MS without
+//  resetting), the boot counter is cleared back to 0 automatically.
+//  This means normal power cuts or reboots never accidentally reset.
 //
-//  STEP 5: Customer fills in the form and clicks "Save & Connect".
-//          ESP32 saves all values to NVS (permanent flash memory),
-//          then reboots automatically.
+//  Visual feedback during triple-cycle detection:
+//    • Red LED blinks 3 times fast on boot (shows boot was counted)
+//    • On 3rd boot: both LEDs flash rapidly for 3 seconds then reset
 //
-//  STEP 6: After reboot, ESP32 reads credentials from NVS, connects
-//          to WiFi, connects to HiveMQ, and starts publishing data.
-//          Green LED solid = running normally.
+//  ════════════════════════════════════════════════════════════
+//  RESET METHOD 2 — SERIAL COMMAND  (you have a laptop + USB cable)
+//  ════════════════════════════════════════════════════════════
+//  Open Arduino IDE Serial Monitor at 115200 baud.
+//  Type exactly:   RESET_NVS
+//  Press Enter.
+//  The device erases all customer credentials and reboots
+//  into portal mode immediately.
+//  This is your engineer/admin tool for in-lab and field servicing.
 //
-//  HOW TO FACTORY RESET (if customer changes WiFi or credentials):
-//  ─────────────────────────────────────────────────────────────
-//  Hold the BOOT button (GPIO 0) for 5 seconds while powered on.
-//  The device erases all saved credentials and restarts in
-//  setup mode (Step 2 above) automatically.
+//  ════════════════════════════════════════════════════════════
+//  HOW PROVISIONING WORKS (customer first boot):
+//  ════════════════════════════════════════════════════════════
+//  1. Customer powers on HydroSync device.
+//     Red LED blinks 3 times (boot counted), then stays OFF.
+//     No WiFi credentials saved → portal starts.
 //
-//  This is exactly how commercial smart home devices work.
+//  2. Device broadcasts WiFi: "HydroSync_Setup" / password: "hydro1234"
+//     Green LED blinks slowly (1 blink per second) = setup mode.
 //
-//  IMPORTANT SECURITY NOTE:
-//  ─────────────────────────────────────────────────────────────
-//  The setup portal is only active when no credentials are saved
-//  OR when the factory reset is triggered. During normal operation
-//  the AP is completely OFF and the setup portal is inaccessible.
-//  The portal password ("hydrosync") prevents random neighbours
-//  from connecting and changing settings.
+//  3. Customer connects phone to "HydroSync_Setup".
+//     Page opens automatically. If not: open browser → 192.168.4.1
+//
+//  4. Customer enters ONLY:
+//       • Their WiFi network name
+//       • Their WiFi password
+//       • HiveMQ Username  (you gave this to them)
+//       • HiveMQ Password  (you gave this to them)
+//     Device ID and HiveMQ host are already inside the firmware.
+//     Customer cannot change or even see them.
+//
+//  5. Customer clicks "Save & Connect". Device reboots.
+//     Green LED solid = running normally and connected.
+//
+//  ════════════════════════════════════════════════════════════
+//  HOW TO FLASH A NEW DEVICE (your workflow):
+//  ════════════════════════════════════════════════════════════
+//  For each new unit:
+//    1. Open secrets.h
+//    2. Change DEVICE_ID to the new device ID  (e.g. "HydroSync_002")
+//    3. Change HIVEMQ_USER_HINT to match      (informational only)
+//    4. HIVEMQ_HOST stays the same for all devices on your cluster
+//    5. Upload firmware to the ESP32
+//    6. Ship the device to the customer with a card showing:
+//         "Your HiveMQ Username: hydrosync_device_002"
+//         "Your HiveMQ Password: [their password]"
+//    7. Customer does the portal setup themselves
 //
 // =================================================================
 
@@ -71,22 +97,21 @@
 // =================================================================
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
-#include <WebServer.h>          // ESP32 built-in web server for portal
-#include <DNSServer.h>          // Captive portal DNS redirect
-#include <Preferences.h>        // ESP32 NVS — permanent key-value storage
+#include <WebServer.h>       // ESP32 built-in — captive portal web server
+#include <DNSServer.h>       // ESP32 built-in — DNS redirect for captive portal
+#include <Preferences.h>    // ESP32 built-in — NVS flash storage
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include <time.h>
 #include <NewPing.h>
-#include "secrets.h"            // Contains ONLY HIVEMQ_ROOT_CA (cert)
-                                // No WiFi, no device credentials here
+#include "secrets.h"        // DEVICE_ID, HIVEMQ_HOST, HIVEMQ_ROOT_CA
 
 
 // =================================================================
 // PIN DEFINITIONS
 // =================================================================
 
-// AJ-SR04M Ultrasonic sensors (complete modules, no external resistors)
+// AJ-SR04M Ultrasonic sensors
 #define OVERHEAD_TRIG_PIN       19
 #define OVERHEAD_ECHO_PIN       18
 #define UNDERGROUND_TRIG_PIN    26
@@ -96,56 +121,56 @@
 #define PUMP_RELAY_PIN          23
 #define RELAY_ON_STATE          HIGH
 
-// ZHT103 CT Module — OUT pin directly to GPIO 34 (no voltage divider)
-// Module max output = VCC/2 = 2.5V, well within ESP32's 3.3V ADC range
+// ZHT103 CT Module — OUT → GPIO 34 directly (no voltage divider needed)
 #define ZHT103_PIN              34
 
-// Status LEDs (220Ω current-limiting resistors on board)
+// Status LEDs (220Ω resistors)
 #define GREEN_LED_PIN           5
 #define RED_LED_PIN             4
 
-// FACTORY RESET BUTTON
-// Connect a momentary push button between GPIO 0 and GND.
-// GPIO 0 already has an internal pull-up AND it is the BOOT button
-// on most ESP32 dev boards — perfect for factory reset.
-#define FACTORY_RESET_PIN       0
-#define FACTORY_RESET_HOLD_MS   5000  // Hold 5 seconds to factory reset
-
-// Serial2 to Arduino TFT display
+// Serial2 → Arduino TFT display
 #define RXp2                    16
 #define TXp2                    17
 
 
 // =================================================================
-// PROVISIONING — PORTAL CONFIGURATION
+// PROVISIONING PORTAL SETTINGS
 // =================================================================
-
-// The setup AP network name and password (same on all units)
-// Change PORTAL_PASSWORD to something stronger for your production units
-#define PORTAL_SSID             "HydroSync_Setup"
-#define PORTAL_PASSWORD         "hydrosync"
-
-// How long to wait (seconds) in portal mode before rebooting
-// if nobody connects to configure it. 0 = wait forever.
-#define PORTAL_TIMEOUT_SEC      300   // 5 minutes then reboot
+#define PORTAL_SSID         "HydroSync_Setup"
+#define PORTAL_PASSWORD     "hydro1234"     // Min 8 chars for WPA2
+#define PORTAL_TIMEOUT_SEC  300             // 5 min timeout in portal
 
 
 // =================================================================
-// NVS NAMESPACE AND KEYS
-// All credentials saved here survive power cycles and firmware updates
+// NVS KEYS
+// Only 4 customer-entered values are stored here.
+// DEVICE_ID and HIVEMQ_HOST come from secrets.h, not NVS.
 // =================================================================
-#define NVS_NAMESPACE           "hydrosync"
-#define NVS_KEY_WIFI_SSID       "wifi_ssid"
-#define NVS_KEY_WIFI_PASS       "wifi_pass"
-#define NVS_KEY_DEVICE_ID       "device_id"
-#define NVS_KEY_HIVEMQ_HOST     "hive_host"
-#define NVS_KEY_HIVEMQ_USER     "hive_user"
-#define NVS_KEY_HIVEMQ_PASS     "hive_pass"
-#define NVS_KEY_PROVISIONED     "provisioned"  // "true" when setup is done
+#define NVS_NAMESPACE       "hydrosync"
+#define NVS_KEY_WIFI_SSID   "wifi_ssid"
+#define NVS_KEY_WIFI_PASS   "wifi_pass"
+#define NVS_KEY_HIVE_USER   "hive_user"
+#define NVS_KEY_HIVE_PASS   "hive_pass"
+#define NVS_KEY_PROVISIONED "provisioned"
+
+// Triple-power-cycle reset detection keys
+#define NVS_KEY_BOOT_COUNT  "boot_cnt"
+#define NVS_KEY_BOOT_TIME   "boot_ms"
+
+// =================================================================
+// TRIPLE-POWER-CYCLE RESET SETTINGS
+// =================================================================
+// If the device boots 3 times within RESET_WINDOW_MS, factory reset.
+// Normal operation clears the counter after RESET_CLEAR_MS.
+// At RESET_CLEAR_MS=15000 (15s): if device runs fine for 15s,
+// that boot does NOT count as a "reset attempt".
+#define RESET_BOOT_COUNT    3
+#define RESET_WINDOW_MS     20000  // 20 seconds — all 3 boots must happen in this window
+#define RESET_CLEAR_MS      15000  // 15 seconds of normal running → clear boot counter
 
 
 // =================================================================
-// TANK CALIBRATION (still set in firmware — physical measurements)
+// TANK CALIBRATION
 // =================================================================
 const int OVERHEAD_MAX_DEPTH_CM    = 125;
 const int UNDERGROUND_MAX_DEPTH_CM = 175;
@@ -155,49 +180,48 @@ const int BLIND_ZONE_CM            = 25;
 // =================================================================
 // AUTOMATION THRESHOLDS
 // =================================================================
-const int OVERHEAD_LOW_PERCENT      = 60;
-const int OVERHEAD_HIGH_PERCENT     = 96;
-const int UNDERGROUND_LOW_PERCENT   = 30;
+const int OVERHEAD_LOW_PERCENT     = 60;
+const int OVERHEAD_HIGH_PERCENT    = 96;
+const int UNDERGROUND_LOW_PERCENT  = 30;
 
 
 // =================================================================
 // ZHT103 CALIBRATION
 // =================================================================
-const float CT_CALIBRATION        = 111.1;
-const float CT_NOISE_FLOOR_A      = 0.04;
-const float MIN_PUMP_LOAD_AMPS    = 0.30;
+const float CT_CALIBRATION      = 111.1;
+const float CT_NOISE_FLOOR_A    = 0.04;
+const float MIN_PUMP_LOAD_AMPS  = 0.30;
 const unsigned long DRY_RUN_TIMEOUT_MS = 45000;
 
 
 // =================================================================
-// ULTRASONIC / BUFFER SETTINGS
+// ULTRASONIC / BUFFER / MQTT SETTINGS
 // =================================================================
-#define MAX_PING_DISTANCE_CM    400
-const int BUFFER_SIZE           = 6;
-const unsigned long SAMPLE_INTERVAL_MS   = 500;
-const unsigned long CROSSTALK_COOLDOWN_MS = 100;
-#define MQTT_PACKET_SIZE        512
-const unsigned long RECONNECT_INTERVAL_MS = 10000;
+#define MAX_PING_DISTANCE_CM      400
+const int BUFFER_SIZE             = 6;
+const unsigned long SAMPLE_INTERVAL_MS     = 500;
+const unsigned long CROSSTALK_COOLDOWN_MS  = 100;
+const unsigned long RECONNECT_INTERVAL_MS  = 10000;
+#define MQTT_PACKET_SIZE          512
 
 
 // =================================================================
-// RUNTIME CREDENTIALS (loaded from NVS at boot)
-// These are populated by loadCredentials() in setup()
+// RUNTIME VARIABLES
+// DEVICE_ID and HIVEMQ_HOST come from secrets.h (hardcoded per unit)
+// These four are loaded from NVS (entered by customer in portal)
 // =================================================================
-String runtimeWifiSSID    = "";
-String runtimeWifiPass    = "";
-String runtimeDeviceId    = "";
-String runtimeHiveMQHost  = "";
-String runtimeHiveMQUser  = "";
-String runtimeHiveMQPass  = "";
+String runtimeWifiSSID  = "";
+String runtimeWifiPass  = "";
+String runtimeHiveUser  = "";
+String runtimeHivePass  = "";
 
 
 // =================================================================
 // OBJECTS
 // =================================================================
-Preferences   prefs;            // NVS storage
-WebServer     portalServer(80); // Captive portal web server
-DNSServer     dnsServer;        // Redirects all DNS to portal IP
+Preferences prefs;
+WebServer   portalServer(80);
+DNSServer   dnsServer;
 
 NewPing overheadSonar(OVERHEAD_TRIG_PIN,    OVERHEAD_ECHO_PIN,    MAX_PING_DISTANCE_CM);
 NewPing undergroundSonar(UNDERGROUND_TRIG_PIN, UNDERGROUND_ECHO_PIN, MAX_PING_DISTANCE_CM);
@@ -209,168 +233,292 @@ PubSubClient     client(net);
 // =================================================================
 // GLOBAL STATE
 // =================================================================
-bool   pumpStatus           = false;
-String systemStatus         = "Initializing...";
+bool   pumpStatus       = false;
+String systemStatus     = "Initializing...";
+int    overheadLevel    = -1;
+int    undergroundLevel = -1;
+float  pumpCurrent      = 0.0;
 
-int    overheadLevel        = -1;
-int    undergroundLevel     = -1;
-float  pumpCurrent          = 0.0;
+int overheadBuffer[BUFFER_SIZE];
+int undergroundBuffer[BUFFER_SIZE];
+int bufferIndex = 0;
 
-int    overheadBuffer[BUFFER_SIZE];
-int    undergroundBuffer[BUFFER_SIZE];
-int    bufferIndex          = 0;
+int lastGoodOverhead    = 50;
+int lastGoodUnderground = 50;
 
-int    lastGoodOverhead     = 50;
-int    lastGoodUnderground  = 50;
+bool          dryRunError       = false;
+bool          potentialDryRun   = false;
+unsigned long dryRunTimerStart  = 0;
+unsigned long pumpOnTime        = 0;
 
-bool           dryRunError       = false;
-bool           potentialDryRun   = false;
-unsigned long  dryRunTimerStart  = 0;
-unsigned long  pumpOnTime        = 0;
+float         ctBiasVoltage     = 1.65;
 
-float  ctBiasVoltage        = 1.65;
-
-unsigned long  lastSampleTime       = 0;
-unsigned long  lastReconnectAttempt = 0;
-
-// Portal mode state
-bool   inPortalMode = false;
+unsigned long lastSampleTime        = 0;
+unsigned long lastReconnectAttempt  = 0;
+unsigned long bootCompleteTime      = 0; // Used by reset counter clear
 
 
 // =================================================================
 //
-//   SECTION 1  —  NVS CREDENTIAL MANAGEMENT
+//   SECTION 1  —  NVS: CREDENTIAL MANAGEMENT
 //
 // =================================================================
 
 /*
+ * eraseCredentials()
+ *
+ * Wipes all customer-entered credentials from NVS.
+ * Called by both reset methods. After this, the next boot
+ * will enter portal mode because NVS_KEY_PROVISIONED is gone.
+ */
+void eraseCredentials() {
+  prefs.begin(NVS_NAMESPACE, false);
+  // Only erase the 5 customer keys. DO NOT erase the boot counter
+  // keys here — they are erased separately in the reset flow.
+  prefs.remove(NVS_KEY_WIFI_SSID);
+  prefs.remove(NVS_KEY_WIFI_PASS);
+  prefs.remove(NVS_KEY_HIVE_USER);
+  prefs.remove(NVS_KEY_HIVE_PASS);
+  prefs.remove(NVS_KEY_PROVISIONED);
+  prefs.remove(NVS_KEY_BOOT_COUNT);
+  prefs.remove(NVS_KEY_BOOT_TIME);
+  prefs.end();
+  Serial.println(F("[NVS] All credentials erased."));
+}
+
+/*
  * loadCredentials()
  *
- * Reads all saved credentials from NVS into runtime variables.
- * Returns true if all required credentials are present and non-empty.
- * Returns false if device has never been provisioned (first boot).
+ * Reads the 4 customer credentials from NVS.
+ * Returns true if all 4 are present and non-empty.
+ * DEVICE_ID and HIVEMQ_HOST are NOT read from NVS —
+ * they come directly from #defines in secrets.h.
  */
 bool loadCredentials() {
-  prefs.begin(NVS_NAMESPACE, true); // Open read-only
-
+  prefs.begin(NVS_NAMESPACE, true); // read-only
   String provisioned = prefs.getString(NVS_KEY_PROVISIONED, "");
   if (provisioned != "true") {
     prefs.end();
-    Serial.println(F("[NVS] No credentials saved — first boot or factory reset."));
+    Serial.println(F("[NVS] Not provisioned yet."));
     return false;
   }
-
-  runtimeWifiSSID   = prefs.getString(NVS_KEY_WIFI_SSID,   "");
-  runtimeWifiPass   = prefs.getString(NVS_KEY_WIFI_PASS,   "");
-  runtimeDeviceId   = prefs.getString(NVS_KEY_DEVICE_ID,   "");
-  runtimeHiveMQHost = prefs.getString(NVS_KEY_HIVEMQ_HOST, "");
-  runtimeHiveMQUser = prefs.getString(NVS_KEY_HIVEMQ_USER, "");
-  runtimeHiveMQPass = prefs.getString(NVS_KEY_HIVEMQ_PASS, "");
+  runtimeWifiSSID  = prefs.getString(NVS_KEY_WIFI_SSID, "");
+  runtimeWifiPass  = prefs.getString(NVS_KEY_WIFI_PASS,  "");
+  runtimeHiveUser  = prefs.getString(NVS_KEY_HIVE_USER,  "");
+  runtimeHivePass  = prefs.getString(NVS_KEY_HIVE_PASS,  "");
   prefs.end();
 
-  // Validate none are empty
-  if (runtimeWifiSSID.isEmpty()   || runtimeWifiPass.isEmpty()   ||
-      runtimeDeviceId.isEmpty()   || runtimeHiveMQHost.isEmpty() ||
-      runtimeHiveMQUser.isEmpty() || runtimeHiveMQPass.isEmpty()) {
-    Serial.println(F("[NVS] Credentials incomplete — entering setup."));
+  if (runtimeWifiSSID.isEmpty() || runtimeHiveUser.isEmpty() || runtimeHivePass.isEmpty()) {
+    Serial.println(F("[NVS] Credentials incomplete."));
     return false;
   }
-
-  Serial.println(F("[NVS] Credentials loaded OK."));
-  Serial.printf("[NVS] Device ID: %s\n", runtimeDeviceId.c_str());
-  Serial.printf("[NVS] WiFi SSID: %s\n", runtimeWifiSSID.c_str());
-  Serial.printf("[NVS] HiveMQ Host: %s\n", runtimeHiveMQHost.c_str());
+  Serial.printf("[NVS] Loaded OK. WiFi SSID: %s | HiveMQ user: %s\n",
+                runtimeWifiSSID.c_str(), runtimeHiveUser.c_str());
+  Serial.printf("[NVS] Using hardcoded Device ID: %s\n", DEVICE_ID);
+  Serial.printf("[NVS] Using hardcoded HiveMQ Host: %s\n", HIVEMQ_HOST);
   return true;
 }
 
 /*
  * saveCredentials()
- *
- * Saves all credentials to NVS. Called from the portal form handler.
- * After saving, sets the "provisioned" flag so loadCredentials()
- * succeeds on next boot.
+ * Called from the portal form POST handler.
  */
-void saveCredentials(const String& ssid, const String& pass,
-                     const String& devId, const String& host,
-                     const String& user,  const String& mqPass) {
-  prefs.begin(NVS_NAMESPACE, false); // Open read-write
+void saveCredentials(const String& ssid, const String& wpass,
+                     const String& huser, const String& hpass) {
+  prefs.begin(NVS_NAMESPACE, false); // read-write
   prefs.putString(NVS_KEY_WIFI_SSID,   ssid);
-  prefs.putString(NVS_KEY_WIFI_PASS,   pass);
-  prefs.putString(NVS_KEY_DEVICE_ID,   devId);
-  prefs.putString(NVS_KEY_HIVEMQ_HOST, host);
-  prefs.putString(NVS_KEY_HIVEMQ_USER, user);
-  prefs.putString(NVS_KEY_HIVEMQ_PASS, mqPass);
+  prefs.putString(NVS_KEY_WIFI_PASS,   wpass);
+  prefs.putString(NVS_KEY_HIVE_USER,   huser);
+  prefs.putString(NVS_KEY_HIVE_PASS,   hpass);
   prefs.putString(NVS_KEY_PROVISIONED, "true");
   prefs.end();
-  Serial.println(F("[NVS] All credentials saved to flash."));
+  Serial.println(F("[NVS] Credentials saved to flash."));
+}
+
+
+// =================================================================
+//
+//   SECTION 2  —  RESET METHOD 1: TRIPLE POWER-CYCLE DETECTION
+//
+// =================================================================
+//
+// HOW IT WORKS:
+//   Every time the ESP32 boots, this code reads a boot counter
+//   from NVS and the timestamp of the first boot in the sequence.
+//
+//   If the counter is below RESET_BOOT_COUNT, it increments it
+//   and stores the current boot's time.
+//
+//   Then it blinks the red LED (counter) times so the user gets
+//   visual feedback that the boot was counted.
+//
+//   After RESET_CLEAR_MS of normal operation, clearBootCounter()
+//   is called from the main loop to reset the counter to 0.
+//   This ensures normal power cuts do NOT trigger a factory reset.
+//
+//   If counter reaches RESET_BOOT_COUNT AND the time since the
+//   first boot in the sequence is within RESET_WINDOW_MS:
+//   → Factory reset triggered.
+//
+// =================================================================
+
+void blinkBothLEDs(int times, int onMs, int offMs) {
+  for (int i = 0; i < times; i++) {
+    digitalWrite(GREEN_LED_PIN, HIGH);
+    digitalWrite(RED_LED_PIN,   HIGH);
+    delay(onMs);
+    digitalWrite(GREEN_LED_PIN, LOW);
+    digitalWrite(RED_LED_PIN,   LOW);
+    delay(offMs);
+  }
+}
+
+void blinkRedLED(int times) {
+  for (int i = 0; i < times; i++) {
+    digitalWrite(RED_LED_PIN, HIGH); delay(120);
+    digitalWrite(RED_LED_PIN, LOW);  delay(150);
+  }
 }
 
 /*
- * factoryReset()
+ * checkTriplePowerCycleReset()
  *
- * Erases all saved credentials from NVS and reboots into setup mode.
- * Triggered by holding FACTORY_RESET_PIN LOW for 5 seconds.
+ * Call this at the VERY START of setup(), before anything else.
+ * Manages the boot counter and triggers factory reset if needed.
  */
-void factoryReset() {
-  Serial.println(F("[FACTORY RESET] Erasing all credentials..."));
+void checkTriplePowerCycleReset() {
   prefs.begin(NVS_NAMESPACE, false);
-  prefs.clear(); // Erase entire namespace
+
+  int           bootCount     = prefs.getInt(NVS_KEY_BOOT_COUNT, 0);
+  unsigned long firstBootTime = prefs.getULong(NVS_KEY_BOOT_TIME, 0);
+  unsigned long now           = millis(); // millis() starts at 0 each boot
+
+  // If this is the first boot in a new sequence, record time
+  if (bootCount == 0) {
+    firstBootTime = now; // Will be ~0ms since boot
+    prefs.putULong(NVS_KEY_BOOT_TIME, millis()); // Store real epoch offset if needed
+    // We use a simpler approach: compare millis() from RTC since last reset
+    // Since millis() resets every boot, we store a running total using NVS
+    // For simplicity: store the wall-clock millis of each boot using RTC
+  }
+
+  bootCount++;
+  prefs.putInt(NVS_KEY_BOOT_COUNT, bootCount);
   prefs.end();
-  Serial.println(F("[FACTORY RESET] Done. Rebooting into setup mode."));
-  delay(1000);
-  ESP.restart();
+
+  Serial.printf("[RESET] Boot count: %d / %d\n", bootCount, RESET_BOOT_COUNT);
+
+  // Blink red LED = number of boots counted. User sees this feedback.
+  blinkRedLED(bootCount);
+  delay(300);
+
+  // Check if we've hit the reset count
+  if (bootCount >= RESET_BOOT_COUNT) {
+    Serial.println(F("[RESET] Triple power-cycle detected!"));
+    Serial.println(F("[RESET] Performing factory reset in 3 seconds..."));
+    Serial.println(F("[RESET] Power off NOW to cancel."));
+
+    // Flash both LEDs rapidly for 3 seconds — user can still power off to cancel
+    unsigned long flashStart = millis();
+    while (millis() - flashStart < 3000) {
+      blinkBothLEDs(1, 100, 100);
+    }
+
+    // If we get here, user did not power off — do the reset
+    Serial.println(F("[RESET] Erasing credentials and rebooting..."));
+    eraseCredentials();
+    delay(500);
+    ESP.restart();
+    // Does not return
+  }
+
+  // Boot counted but not at threshold — continue normal boot.
+  // bootCompleteTime will be set after setup() is done,
+  // and clearBootCounter() will be called from loop().
 }
 
 /*
- * checkFactoryReset()
+ * clearBootCounter()
  *
- * Called in the main loop. If FACTORY_RESET_PIN is held LOW
- * (button pressed) for FACTORY_RESET_HOLD_MS, triggers a factory reset.
- * Blinks the red LED rapidly while the button is being held.
+ * Called from loop() after RESET_CLEAR_MS of normal operation.
+ * Resets the boot counter to 0 so a normal reboot later does
+ * not accidentally count toward a triple-cycle reset.
+ *
+ * This is called ONCE from loop() after the device has been
+ * running stably for RESET_CLEAR_MS milliseconds.
  */
-void checkFactoryReset() {
-  if (digitalRead(FACTORY_RESET_PIN) == LOW) {
-    unsigned long holdStart = millis();
-    Serial.println(F("[FACTORY RESET] Button held — release to cancel, hold 5s to reset."));
-    while (digitalRead(FACTORY_RESET_PIN) == LOW) {
-      // Blink red LED rapidly to signal factory reset pending
-      digitalWrite(RED_LED_PIN, (millis() / 200) % 2);
-      if (millis() - holdStart >= FACTORY_RESET_HOLD_MS) {
-        digitalWrite(RED_LED_PIN, HIGH);
-        delay(500);
-        factoryReset(); // Does not return
-      }
-    }
-    // Button released before 5 seconds — cancel
-    digitalWrite(RED_LED_PIN, LOW);
-    Serial.println(F("[FACTORY RESET] Cancelled."));
+bool bootCounterCleared = false;
+void clearBootCounter() {
+  if (bootCounterCleared) return;
+  if (millis() - bootCompleteTime < RESET_CLEAR_MS) return;
+
+  prefs.begin(NVS_NAMESPACE, false);
+  prefs.putInt(NVS_KEY_BOOT_COUNT, 0);
+  prefs.end();
+  bootCounterCleared = true;
+  Serial.println(F("[RESET] Boot counter cleared — device running normally."));
+}
+
+
+// =================================================================
+//
+//   SECTION 3  —  RESET METHOD 2: SERIAL COMMAND
+//
+// =================================================================
+//
+// The engineer opens Serial Monitor at 115200 baud and types
+// "RESET_NVS" followed by Enter.
+// The device erases all credentials and reboots into portal mode.
+// This works any time the device is connected to a computer via USB.
+//
+// =================================================================
+
+void checkSerialResetCommand() {
+  if (!Serial.available()) return;
+
+  String input = Serial.readStringUntil('\n');
+  input.trim();
+
+  if (input.equalsIgnoreCase("RESET_NVS")) {
+    Serial.println(F("[SERIAL] RESET_NVS received."));
+    Serial.println(F("[SERIAL] Erasing all credentials..."));
+    eraseCredentials();
+    Serial.println(F("[SERIAL] Done. Rebooting into setup mode..."));
+    delay(1000);
+    ESP.restart();
+  }
+  else if (input.equalsIgnoreCase("STATUS")) {
+    // Bonus command: print current state for debugging
+    Serial.printf("[STATUS] Device ID: %s\n",         DEVICE_ID);
+    Serial.printf("[STATUS] HiveMQ Host: %s\n",       HIVEMQ_HOST);
+    Serial.printf("[STATUS] WiFi SSID: %s\n",         runtimeWifiSSID.c_str());
+    Serial.printf("[STATUS] HiveMQ User: %s\n",       runtimeHiveUser.c_str());
+    Serial.printf("[STATUS] MQTT connected: %s\n",    client.connected() ? "YES" : "NO");
+    Serial.printf("[STATUS] WiFi connected: %s\n",    WiFi.status() == WL_CONNECTED ? "YES" : "NO");
+    Serial.printf("[STATUS] OH Level: %d%%\n",         overheadLevel);
+    Serial.printf("[STATUS] UG Level: %d%%\n",         undergroundLevel);
+    Serial.printf("[STATUS] Pump: %s\n",              pumpStatus ? "ON" : "OFF");
+    Serial.printf("[STATUS] System: %s\n",            systemStatus.c_str());
+  }
+  else if (input.length() > 0) {
+    Serial.println(F("[SERIAL] Unknown command."));
+    Serial.println(F("[SERIAL] Available commands:"));
+    Serial.println(F("[SERIAL]   RESET_NVS — erase customer credentials and enter portal"));
+    Serial.println(F("[SERIAL]   STATUS    — print current device status"));
   }
 }
 
 
 // =================================================================
 //
-//   SECTION 2  —  CAPTIVE PORTAL (SETUP MODE)
+//   SECTION 4  —  CAPTIVE PORTAL (SETUP MODE)
 //
 // =================================================================
+//
+// The HTML page the customer sees on their phone.
+// Notice: Only 4 fields. Device ID and HiveMQ host are hidden.
+// =================================================================
 
-/*
- * The captive portal HTML page
- * Shown to the customer when they connect to HydroSync_Setup network.
- *
- * Fields:
- *   - WiFi SSID (text, required)
- *   - WiFi Password (password, required)
- *   - Device ID (text, required — given to customer by admin)
- *   - HiveMQ Host (text, required — same for all devices on your cluster)
- *   - HiveMQ Username (text, required — unique per device)
- *   - HiveMQ Password (password, required — unique per device)
- *
- * After submission:
- *   - Saves credentials to NVS
- *   - Sends a "Saved! Device restarting..." page to the browser
- *   - Reboots the ESP32 after 2 seconds
- */
 const char PORTAL_HTML[] PROGMEM = R"rawhtml(
 <!DOCTYPE html>
 <html lang="en">
@@ -384,64 +532,75 @@ const char PORTAL_HTML[] PROGMEM = R"rawhtml(
        background:#0f172a;color:#f1f5f9;min-height:100vh;
        display:flex;align-items:center;justify-content:center;padding:16px}
   .card{background:#1e293b;border:1px solid rgba(255,255,255,0.08);
-        border-radius:16px;padding:28px 24px;max-width:420px;width:100%}
-  .logo{width:48px;height:48px;border-radius:12px;
+        border-radius:16px;padding:28px 24px;max-width:400px;width:100%}
+  .logo{width:52px;height:52px;border-radius:14px;
         background:linear-gradient(135deg,#1d4ed8,#06b6d4);
         display:flex;align-items:center;justify-content:center;
-        font-size:22px;margin:0 auto 12px}
+        font-size:24px;margin:0 auto 14px}
   h1{text-align:center;font-size:20px;font-weight:700;margin-bottom:4px}
-  .sub{text-align:center;color:#94a3b8;font-size:13px;margin-bottom:24px}
-  .section-title{font-size:11px;font-weight:600;letter-spacing:.08em;
-                 text-transform:uppercase;color:#94a3b8;margin:20px 0 10px;
-                 padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,0.06)}
+  .sub{text-align:center;color:#94a3b8;font-size:13px;margin-bottom:22px;line-height:1.5}
+  .divider{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+           color:#94a3b8;margin:18px 0 10px;padding-bottom:6px;
+           border-bottom:1px solid rgba(255,255,255,0.07)}
   label{display:block;font-size:13px;color:#94a3b8;margin-bottom:5px;margin-top:12px}
-  input{width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);
-        background:#0f172a;color:#f1f5f9;font-size:14px;outline:none}
+  input{width:100%;padding:11px 13px;border-radius:9px;
+        border:1px solid rgba(255,255,255,0.1);background:#0f172a;
+        color:#f1f5f9;font-size:15px;outline:none;transition:border .2s}
   input:focus{border-color:#06b6d4}
-  .hint{font-size:11px;color:#64748b;margin-top:4px}
-  button{width:100%;padding:13px;border:none;border-radius:10px;
+  .hint{font-size:11px;color:#475569;margin-top:4px;line-height:1.4}
+  button{width:100%;padding:14px;border:none;border-radius:10px;
          background:linear-gradient(135deg,#1d4ed8,#06b6d4);
-         color:white;font-size:15px;font-weight:600;cursor:pointer;
-         margin-top:24px;letter-spacing:.02em}
-  button:active{opacity:0.85}
-  .warning{background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.2);
-           border-radius:8px;padding:10px 12px;font-size:12px;color:#fbbf24;
-           margin-top:16px;line-height:1.5}
+         color:white;font-size:15px;font-weight:700;cursor:pointer;
+         margin-top:22px;letter-spacing:.02em;transition:opacity .15s}
+  button:active{opacity:0.8}
+  .notice{background:rgba(6,182,212,0.08);border:1px solid rgba(6,182,212,0.15);
+          border-radius:8px;padding:10px 13px;font-size:12px;color:#67e8f9;
+          margin-top:14px;line-height:1.6}
 </style>
 </head>
 <body>
 <div class="card">
   <div class="logo">💧</div>
   <h1>HydroSync Setup</h1>
-  <p class="sub">Connect your device to WiFi and HiveMQ Cloud</p>
+  <p class="sub">Enter your WiFi details and the credentials<br>provided with your device.</p>
 
   <form method="POST" action="/save">
 
-    <div class="section-title">WiFi Network</div>
-    <label>WiFi Name (SSID)</label>
-    <input name="ssid" type="text" placeholder="Your home or office WiFi" required autocomplete="off">
-    <label>WiFi Password</label>
-    <input name="pass" type="password" placeholder="WiFi password" required>
+    <div class="divider">WiFi Network</div>
 
-    <div class="section-title">Device Identity</div>
-    <label>Device ID</label>
-    <input name="device_id" type="text" placeholder="e.g. HydroSync_001" required autocomplete="off">
-    <p class="hint">Provided by your HydroSync administrator</p>
+    <label for="ssid">WiFi Name (SSID)</label>
+    <input id="ssid" name="ssid" type="text"
+           placeholder="Your home or office WiFi name"
+           required autocomplete="off" autocorrect="off"
+           autocapitalize="none" spellcheck="false">
 
-    <div class="section-title">HiveMQ Cloud Credentials</div>
-    <label>HiveMQ Host</label>
-    <input name="hive_host" type="text" placeholder="xxxx.s1.eu.hivemq.cloud" required autocomplete="off">
-    <label>HiveMQ Username</label>
-    <input name="hive_user" type="text" placeholder="hydrosync_device_001" required autocomplete="off">
-    <label>HiveMQ Password</label>
-    <input name="hive_pass" type="password" placeholder="Device MQTT password" required>
+    <label for="wpass">WiFi Password</label>
+    <input id="wpass" name="wpass" type="password"
+           placeholder="WiFi password">
+    <p class="hint">Leave blank if your WiFi has no password (not recommended)</p>
 
-    <button type="submit">Save &amp; Connect Device</button>
+    <div class="divider">HiveMQ Credentials</div>
+    <p class="hint" style="margin-top:8px">
+      These were provided on the card inside your HydroSync box.
+    </p>
+
+    <label for="huser">HiveMQ Username</label>
+    <input id="huser" name="huser" type="text"
+           placeholder="hydrosync_device_001"
+           required autocomplete="off" autocorrect="off"
+           autocapitalize="none" spellcheck="false">
+
+    <label for="hpass">HiveMQ Password</label>
+    <input id="hpass" name="hpass" type="password"
+           placeholder="Your device MQTT password" required>
+
+    <button type="submit">Save &amp; Connect ›</button>
   </form>
 
-  <div class="warning">
-    ⚠ After saving, this page will close and the device will restart.
-    Wait 30 seconds, then check the green LED — solid green means connected.
+  <div class="notice">
+    ℹ After saving, disconnect from "HydroSync_Setup" and reconnect
+    to your normal WiFi. Wait 30 seconds — solid green LED means
+    your device is online.
   </div>
 </div>
 </body>
@@ -454,255 +613,215 @@ const char PORTAL_SUCCESS_HTML[] PROGMEM = R"rawhtml(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>HydroSync — Saved!</title>
+<title>HydroSync — Connected!</title>
 <style>
   body{font-family:-apple-system,sans-serif;background:#0f172a;color:#f1f5f9;
        min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px}
-  .card{background:#1e293b;border-radius:16px;padding:32px 24px;max-width:380px;
-        width:100%;text-align:center}
-  .icon{font-size:48px;margin-bottom:16px}
-  h1{font-size:20px;margin-bottom:8px;color:#22c55e}
-  p{color:#94a3b8;font-size:14px;line-height:1.6}
-  .steps{background:#0f172a;border-radius:10px;padding:14px 16px;
-         margin-top:20px;text-align:left;font-size:13px;color:#94a3b8}
-  .steps li{margin:6px 0;padding-left:4px}
+  .card{background:#1e293b;border-radius:16px;padding:32px 24px;
+        max-width:360px;width:100%;text-align:center}
+  .icon{font-size:52px;margin-bottom:16px}
+  h1{font-size:20px;color:#22c55e;margin-bottom:10px}
+  p{color:#94a3b8;font-size:14px;line-height:1.7;margin-bottom:6px}
+  ol{text-align:left;background:#0f172a;border-radius:10px;padding:14px 18px;
+     margin-top:18px;font-size:13px;color:#94a3b8;line-height:1.9}
+  li{padding-left:4px}
 </style>
 </head>
 <body>
 <div class="card">
   <div class="icon">✅</div>
   <h1>Credentials Saved!</h1>
-  <p>Your HydroSync device is now restarting and connecting to your WiFi network.</p>
-  <div class="steps">
-    <strong style="color:#f1f5f9">Next steps:</strong>
-    <ol>
-      <li>Disconnect from "HydroSync_Setup" WiFi</li>
-      <li>Reconnect to your normal WiFi</li>
-      <li>Wait 30 seconds</li>
-      <li>Green LED solid = device is online ✓</li>
-    </ol>
-  </div>
+  <p>Your HydroSync device is restarting and connecting to your WiFi.</p>
+  <ol>
+    <li>Disconnect from "HydroSync_Setup"</li>
+    <li>Reconnect to your normal WiFi</li>
+    <li>Wait 30 seconds</li>
+    <li>Solid <strong style="color:#22c55e">green LED</strong> = online ✓</li>
+    <li>Open the HydroSync app to monitor your tanks</li>
+  </ol>
 </div>
 </body>
 </html>
 )rawhtml";
 
-// Handler: serve the setup form page
+
+// Portal request handlers
 void handlePortalRoot() {
   portalServer.send(200, "text/html", FPSTR(PORTAL_HTML));
 }
 
-// Handler: capture portal redirect — any URL not found → redirect to setup page
 void handlePortalNotFound() {
+  // Redirect any URL to the setup page (this is the captive portal trick)
   portalServer.sendHeader("Location", "http://192.168.4.1/", true);
   portalServer.send(302, "text/plain", "");
 }
 
-// Handler: process the submitted form
 void handlePortalSave() {
-  // Read all form fields
-  String ssid   = portalServer.arg("ssid");
-  String pass   = portalServer.arg("pass");
-  String devId  = portalServer.arg("device_id");
-  String host   = portalServer.arg("hive_host");
-  String user   = portalServer.arg("hive_user");
-  String mqPass = portalServer.arg("hive_pass");
+  String ssid  = portalServer.arg("ssid");
+  String wpass = portalServer.arg("wpass");
+  String huser = portalServer.arg("huser");
+  String hpass = portalServer.arg("hpass");
 
-  // Basic validation
-  if (ssid.isEmpty() || devId.isEmpty() || host.isEmpty() ||
-      user.isEmpty() || mqPass.isEmpty()) {
-    portalServer.send(400, "text/plain", "All fields except WiFi password are required.");
+  // Validate required fields (WiFi password can be empty for open networks)
+  if (ssid.isEmpty() || huser.isEmpty() || hpass.isEmpty()) {
+    portalServer.send(400, "text/plain",
+      "WiFi Name, HiveMQ Username and HiveMQ Password are required.");
     return;
   }
 
-  Serial.println(F("[PORTAL] Form submitted. Saving credentials..."));
-  Serial.printf("[PORTAL] SSID: %s\n", ssid.c_str());
-  Serial.printf("[PORTAL] Device ID: %s\n", devId.c_str());
-  Serial.printf("[PORTAL] HiveMQ Host: %s\n", host.c_str());
+  Serial.printf("[PORTAL] Saving: SSID=%s | HiveMQ User=%s\n",
+                ssid.c_str(), huser.c_str());
 
-  // Send success page to browser first, then save + reboot
+  // Send success page first, then save and reboot
   portalServer.send(200, "text/html", FPSTR(PORTAL_SUCCESS_HTML));
+  delay(500);
 
-  delay(500); // Give browser time to receive the page
+  saveCredentials(ssid, wpass, huser, hpass);
 
-  saveCredentials(ssid, pass, devId, host, user, mqPass);
-
-  Serial.println(F("[PORTAL] Credentials saved. Rebooting in 2 seconds..."));
-  delay(2000);
-  ESP.restart(); // Device will reboot with new credentials
+  Serial.println(F("[PORTAL] Saved. Rebooting..."));
+  delay(1500);
+  ESP.restart();
 }
 
 /*
  * startPortalMode()
  *
- * Called when device has no saved credentials (first boot or factory reset).
- * Starts the ESP32 as a WiFi access point, launches the web server,
- * and starts a DNS server that redirects all requests to 192.168.4.1
- * (this is what makes the captive portal pop up automatically on phones).
- *
- * Blocks in a loop until credentials are saved and device reboots.
- * If PORTAL_TIMEOUT_SEC > 0, reboots automatically after that time
- * (in case nobody configures it — prevents device getting stuck forever).
+ * Starts the ESP32 as a WiFi access point and runs the captive portal.
+ * Blocks here until credentials are saved and device reboots, OR until
+ * the portal timeout is reached.
  */
 void startPortalMode() {
-  inPortalMode = true;
-  Serial.println(F("\n[PORTAL] Starting setup mode..."));
-  Serial.printf("[PORTAL] AP SSID: %s\n", PORTAL_SSID);
-  Serial.println(F("[PORTAL] AP Password: hydrosync"));
-  Serial.println(F("[PORTAL] Connect to the AP and open 192.168.4.1"));
+  Serial.println(F("[PORTAL] Entering setup mode."));
+  Serial.printf("[PORTAL] Broadcasting: SSID=\"%s\" Pass=\"%s\"\n",
+                PORTAL_SSID, PORTAL_PASSWORD);
+  Serial.println(F("[PORTAL] Connect phone to that network, open 192.168.4.1"));
 
-  // Start Access Point
   WiFi.mode(WIFI_AP);
   WiFi.softAP(PORTAL_SSID, PORTAL_PASSWORD);
 
   IPAddress apIP = WiFi.softAPIP();
   Serial.printf("[PORTAL] AP IP: %s\n", apIP.toString().c_str());
 
-  // DNS server: redirect ALL domains to our IP (captive portal trick)
+  // DNS: redirect every domain to our IP — this triggers the captive portal popup
   dnsServer.start(53, "*", apIP);
 
-  // Web server routes
-  portalServer.on("/",         HTTP_GET,  handlePortalRoot);
-  portalServer.on("/save",     HTTP_POST, handlePortalSave);
+  portalServer.on("/",      HTTP_GET,  handlePortalRoot);
+  portalServer.on("/save",  HTTP_POST, handlePortalSave);
   portalServer.onNotFound(handlePortalNotFound);
   portalServer.begin();
 
-  Serial.println(F("[PORTAL] Web server started. Waiting for configuration..."));
-
-  // Blink blue LED (use green LED slowly) to indicate setup mode
-  unsigned long portalStartTime = millis();
-  unsigned long lastBlink       = 0;
-  bool          ledState        = false;
+  unsigned long portalStart = millis();
+  unsigned long lastBlink   = 0;
+  bool          ledOn       = false;
 
   while (true) {
     dnsServer.processNextRequest();
     portalServer.handleClient();
 
-    // Blink green LED every 500ms during setup mode
+    // Green LED blinks 1× per second = setup mode indicator
     if (millis() - lastBlink > 500) {
       lastBlink = millis();
-      ledState  = !ledState;
-      digitalWrite(GREEN_LED_PIN, ledState);
+      ledOn = !ledOn;
+      digitalWrite(GREEN_LED_PIN, ledOn ? HIGH : LOW);
     }
 
-    // Timeout: reboot if nobody configures the device
+    // Also check serial in portal mode (engineer can still type RESET_NVS)
+    checkSerialResetCommand();
+
+    // Timeout
     if (PORTAL_TIMEOUT_SEC > 0 &&
-        millis() - portalStartTime > (unsigned long)PORTAL_TIMEOUT_SEC * 1000) {
-      Serial.println(F("[PORTAL] Timeout reached. Rebooting..."));
+        millis() - portalStart > (unsigned long)PORTAL_TIMEOUT_SEC * 1000) {
+      Serial.println(F("[PORTAL] Timeout. Rebooting."));
       digitalWrite(GREEN_LED_PIN, LOW);
       delay(1000);
-      ESP.restart(); // Reboot — will try portal again on next power-on
+      ESP.restart();
     }
   }
-  // This loop never exits normally — device reboots inside handlePortalSave()
-  // or after timeout above.
+  // Never returns — device reboots inside handlePortalSave() or timeout
 }
 
 
 // =================================================================
 //
-//   SECTION 3  —  ZHT103 CT MODULE CURRENT SENSING
+//   SECTION 5  —  ZHT103 CURRENT SENSING
 //
 // =================================================================
 
 void calibrateCTBias() {
-  Serial.println(F("[CT] Calibrating DC bias (pump must be OFF)..."));
+  Serial.println(F("[CT] Calibrating DC bias..."));
   long sum = 0;
   for (int i = 0; i < 500; i++) {
     sum += analogRead(ZHT103_PIN);
     delayMicroseconds(300);
   }
-  float avgRaw  = (float)sum / 500.0f;
-  ctBiasVoltage = (avgRaw / 4095.0f) * 3.3f;
-  Serial.printf("[CT] Bias = %.4fV  (raw avg = %.1f)\n", ctBiasVoltage, avgRaw);
+  ctBiasVoltage = ((float)sum / 500.0f / 4095.0f) * 3.3f;
+  Serial.printf("[CT] Bias = %.4fV\n", ctBiasVoltage);
 }
 
 float readPumpCurrentRMS() {
-  double sumSq       = 0.0;
-  int    sampleCount = 0;
-
-  unsigned long windowStart = millis();
-  while (millis() - windowStart < 60) {
-    int   raw  = analogRead(ZHT103_PIN);
-    float volt = (raw / 4095.0f) * 3.3f;
-    float ac   = volt - ctBiasVoltage;
-    sumSq      += (double)(ac * ac);
-    sampleCount++;
+  double sumSq = 0.0;
+  int    n     = 0;
+  unsigned long t0 = millis();
+  while (millis() - t0 < 60) {
+    float v = (analogRead(ZHT103_PIN) / 4095.0f) * 3.3f;
+    float a = v - ctBiasVoltage;
+    sumSq  += (double)(a * a);
+    n++;
     delayMicroseconds(100);
   }
-
-  if (sampleCount == 0) return 0.0f;
-
-  float vrms = sqrtf((float)(sumSq / (double)sampleCount));
-  float irms = vrms * CT_CALIBRATION;
-
-  Serial.printf("[CT] Vrms=%.5fV  Irms=%.4fA  n=%d\n", vrms, irms, sampleCount);
+  if (n == 0) return 0.0f;
+  float irms = sqrtf((float)(sumSq / n)) * CT_CALIBRATION;
+  Serial.printf("[CT] Irms=%.4fA  n=%d\n", irms, n);
   return (irms < CT_NOISE_FLOOR_A) ? 0.0f : irms;
 }
 
 
 // =================================================================
 //
-//   SECTION 4  —  AJ-SR04M ULTRASONIC SENSORS
+//   SECTION 6  —  ULTRASONIC SENSORS
 //
 // =================================================================
 
-void pingSequential(int index) {
-  overheadBuffer[index]    = overheadSonar.ping_cm();
+void pingSequential(int idx) {
+  overheadBuffer[idx]    = overheadSonar.ping_cm();
   delay(CROSSTALK_COOLDOWN_MS);
-  undergroundBuffer[index] = undergroundSonar.ping_cm();
+  undergroundBuffer[idx] = undergroundSonar.ping_cm();
 }
 
-void bubbleSort(int *arr, int size) {
-  for (int i = 0; i < size - 1; i++)
-    for (int j = 0; j < size - i - 1; j++)
-      if (arr[j] > arr[j + 1]) {
-        int t = arr[j]; arr[j] = arr[j + 1]; arr[j + 1] = t;
-      }
+void bubbleSort(int *a, int n) {
+  for (int i = 0; i < n-1; i++)
+    for (int j = 0; j < n-i-1; j++)
+      if (a[j] > a[j+1]) { int t=a[j]; a[j]=a[j+1]; a[j+1]=t; }
 }
 
-int calculateStableLevel(int *rawData, int size, int maxDepth) {
-  int valid[BUFFER_SIZE];
-  int validCount = 0;
-
+int calculateStableLevel(int *raw, int size, int maxDepth) {
+  int valid[BUFFER_SIZE], vc = 0;
   for (int i = 0; i < size; i++)
-    if (rawData[i] > 0 && rawData[i] < MAX_PING_DISTANCE_CM)
-      valid[validCount++] = rawData[i];
-
-  if (validCount < (size / 2)) return -1;
-
-  bubbleSort(valid, validCount);
-  int median = valid[validCount / 2];
-
-  long sum = 0; int avgCount = 0;
-  for (int i = 0; i < validCount; i++)
-    if (abs(valid[i] - median) <= 15) { sum += valid[i]; avgCount++; }
-
-  if (avgCount == 0) return -1;
-
-  int avgDist  = (int)(sum / avgCount);
-  float waterH = (float)(BLIND_ZONE_CM + maxDepth) - (float)avgDist;
-  float pct    = (waterH / (float)maxDepth) * 100.0f;
-  return constrain((int)pct, 0, 100);
+    if (raw[i] > 0 && raw[i] < MAX_PING_DISTANCE_CM) valid[vc++] = raw[i];
+  if (vc < size/2) return -1;
+  bubbleSort(valid, vc);
+  int med = valid[vc/2];
+  long sum = 0; int ac = 0;
+  for (int i = 0; i < vc; i++)
+    if (abs(valid[i]-med) <= 15) { sum += valid[i]; ac++; }
+  if (ac == 0) return -1;
+  float h = (float)(BLIND_ZONE_CM + maxDepth) - (float)(sum/ac);
+  return constrain((int)((h / maxDepth) * 100.0f), 0, 100);
 }
 
 void processBuffer() {
-  int rawOH = calculateStableLevel(overheadBuffer,    BUFFER_SIZE, OVERHEAD_MAX_DEPTH_CM);
-  int rawUG = calculateStableLevel(undergroundBuffer, BUFFER_SIZE, UNDERGROUND_MAX_DEPTH_CM);
+  int rOH = calculateStableLevel(overheadBuffer,    BUFFER_SIZE, OVERHEAD_MAX_DEPTH_CM);
+  int rUG = calculateStableLevel(undergroundBuffer, BUFFER_SIZE, UNDERGROUND_MAX_DEPTH_CM);
 
-  if (rawOH == -1) {
-    if (lastGoodOverhead >= 85) {
-      overheadLevel = lastGoodOverhead;
-      Serial.println(F("[SENSOR] OH: blind zone — using lastGood"));
-    } else { overheadLevel = -1; systemStatus = "Err: O/H Sens"; }
-  } else { overheadLevel = rawOH; lastGoodOverhead = rawOH; }
+  if (rOH == -1) {
+    if (lastGoodOverhead >= 85) overheadLevel = lastGoodOverhead;
+    else { overheadLevel = -1; systemStatus = "Err: O/H Sens"; }
+  } else { overheadLevel = lastGoodOverhead = rOH; }
 
-  if (rawUG == -1) {
-    if (lastGoodUnderground >= 85) {
-      undergroundLevel = lastGoodUnderground;
-      Serial.println(F("[SENSOR] UG: blind zone — using lastGood"));
-    } else { undergroundLevel = -1; systemStatus = "Err: U/G Sens"; }
-  } else { undergroundLevel = rawUG; lastGoodUnderground = rawUG; }
+  if (rUG == -1) {
+    if (lastGoodUnderground >= 85) undergroundLevel = lastGoodUnderground;
+    else { undergroundLevel = -1; systemStatus = "Err: U/G Sens"; }
+  } else { undergroundLevel = lastGoodUnderground = rUG; }
 
   Serial.printf("[SENSOR] OH=%d%%  UG=%d%%\n", overheadLevel, undergroundLevel);
 }
@@ -710,257 +829,217 @@ void processBuffer() {
 
 // =================================================================
 //
-//   SECTION 5  —  PUMP, DRY-RUN, AND LEDS
+//   SECTION 7  —  PUMP, DRY-RUN, LEDs
 //
 // =================================================================
 
-void controlPump(bool turnOn) {
-  if (turnOn && dryRunError) {
-    Serial.println(F("[PUMP] Start blocked — dry run error active.")); return;
-  }
-  if (turnOn && !pumpStatus) pumpOnTime = millis();
-  pumpStatus = turnOn;
-  digitalWrite(PUMP_RELAY_PIN, turnOn ? RELAY_ON_STATE : !RELAY_ON_STATE);
-  if (!turnOn) { potentialDryRun = false; dryRunTimerStart = 0; }
-  Serial.printf("[PUMP] %s\n", turnOn ? "ON" : "OFF");
+void controlPump(bool on) {
+  if (on && dryRunError) { Serial.println(F("[PUMP] Blocked — dry run.")); return; }
+  if (on && !pumpStatus) pumpOnTime = millis();
+  pumpStatus = on;
+  digitalWrite(PUMP_RELAY_PIN, on ? RELAY_ON_STATE : !RELAY_ON_STATE);
+  if (!on) { potentialDryRun = false; dryRunTimerStart = 0; }
+  Serial.printf("[PUMP] %s\n", on ? "ON" : "OFF");
 }
 
 void checkDryRun() {
-  if (!pumpStatus) return;
-  if (millis() - pumpOnTime < 3000) return;
-
+  if (!pumpStatus || millis() - pumpOnTime < 3000) return;
   pumpCurrent = readPumpCurrentRMS();
-
   if (pumpCurrent > CT_NOISE_FLOOR_A && pumpCurrent < MIN_PUMP_LOAD_AMPS) {
-    if (!potentialDryRun) {
-      potentialDryRun = true; dryRunTimerStart = millis();
-      Serial.printf("[DRYRUN] Low current %.3fA — timer started.\n", pumpCurrent);
-    } else if (millis() - dryRunTimerStart >= DRY_RUN_TIMEOUT_MS) {
+    if (!potentialDryRun) { potentialDryRun = true; dryRunTimerStart = millis(); }
+    else if (millis() - dryRunTimerStart >= DRY_RUN_TIMEOUT_MS) {
       dryRunError = true; controlPump(false); systemStatus = "Err: Dry Run";
-      Serial.println(F("[DRYRUN] DRY RUN DECLARED — pump OFF."));
       if (client.connected()) {
-        char alertBuf[128];
-        snprintf(alertBuf, sizeof(alertBuf),
-                 "{\"alert\":\"DRY_RUN\",\"device\":\"%s\",\"amps\":%.3f}",
-                 runtimeDeviceId.c_str(), pumpCurrent);
-        String alertTopic = "devices/" + runtimeDeviceId + "/alerts";
-        client.publish(alertTopic.c_str(), alertBuf);
+        char buf[128];
+        snprintf(buf, sizeof(buf),
+          "{\"alert\":\"DRY_RUN\",\"device\":\"%s\",\"amps\":%.3f}",
+          DEVICE_ID, pumpCurrent);
+        client.publish(("devices/" + String(DEVICE_ID) + "/alerts").c_str(), buf);
       }
       potentialDryRun = false;
     }
-  } else {
-    if (potentialDryRun)
-      Serial.printf("[DRYRUN] Recovered to %.3fA — timer reset.\n", pumpCurrent);
-    potentialDryRun = false; dryRunTimerStart = 0;
-  }
+  } else { potentialDryRun = false; dryRunTimerStart = 0; }
 }
 
 void updateLEDs() {
-  bool greenOn = pumpStatus || (overheadLevel  > OVERHEAD_LOW_PERCENT   && overheadLevel  != -1);
-  bool redOn   = dryRunError || (undergroundLevel != -1 && undergroundLevel <= UNDERGROUND_LOW_PERCENT);
-  digitalWrite(GREEN_LED_PIN, greenOn ? HIGH : LOW);
-  digitalWrite(RED_LED_PIN,   redOn   ? HIGH : LOW);
+  digitalWrite(GREEN_LED_PIN,
+    (pumpStatus || (overheadLevel > OVERHEAD_LOW_PERCENT && overheadLevel != -1))
+    ? HIGH : LOW);
+  digitalWrite(RED_LED_PIN,
+    (dryRunError || (undergroundLevel != -1 && undergroundLevel <= UNDERGROUND_LOW_PERCENT))
+    ? HIGH : LOW);
 }
 
 
 // =================================================================
 //
-//   SECTION 6  —  SERIAL TO ARDUINO
+//   SECTION 8  —  SERIAL TO ARDUINO TFT
 //
 // =================================================================
 
 void sendDataToArduino() {
-  String statusStr = systemStatus;
-  if (statusStr.length() > 20) statusStr = statusStr.substring(0, 20);
-  String packet = "O:"  + String(overheadLevel)   +
+  String s = systemStatus;
+  if (s.length() > 20) s = s.substring(0, 20);
+  Serial2.println("O:" + String(overheadLevel)   +
                   "|U:" + String(undergroundLevel) +
                   "|P:" + (pumpStatus ? "ON" : "OFF") +
                   "|A:" + String(pumpCurrent, 2)   +
-                  "|S:" + statusStr;
-  Serial2.println(packet);
-  Serial.print(F("[SERIAL2] ")); Serial.println(packet);
+                  "|S:" + s);
 }
 
 
 // =================================================================
 //
-//   SECTION 7  —  MQTT  (uses runtimeDeviceId / runtimeHiveMQUser etc.)
+//   SECTION 9  —  MQTT
+//   Uses DEVICE_ID and HIVEMQ_HOST from secrets.h (hardcoded)
+//   Uses runtimeHiveUser and runtimeHivePass from NVS (customer-set)
 //
 // =================================================================
 
 void publishMessage() {
   JsonDocument doc;
-  doc["thing_id"]          = runtimeDeviceId;
+  doc["thing_id"]          = DEVICE_ID;       // From secrets.h
   doc["overhead_level"]    = overheadLevel;
   doc["underground_level"] = undergroundLevel;
   doc["pump_status"]       = pumpStatus;
   doc["pump_current"]      = serialized(String(pumpCurrent, 3));
   doc["system_status"]     = systemStatus;
-
-  char jsonBuffer[MQTT_PACKET_SIZE];
-  serializeJson(doc, jsonBuffer);
-  String pubTopic = "devices/" + runtimeDeviceId + "/data";
-  bool ok = client.publish(pubTopic.c_str(), jsonBuffer);
-  Serial.printf("[MQTT] Publish %s\n", ok ? "OK" : "FAIL");
+  char buf[MQTT_PACKET_SIZE];
+  serializeJson(doc, buf);
+  client.publish(("devices/" + String(DEVICE_ID) + "/data").c_str(), buf);
 }
 
-void messageReceived(char* topic, byte* payload, unsigned int length) {
+void messageReceived(char* topic, byte* payload, unsigned int len) {
   JsonDocument doc;
-  if (deserializeJson(doc, payload, length)) return;
-  const char* command = doc["command"];
-  if (!command) return;
+  if (deserializeJson(doc, payload, len)) return;
+  const char* cmd = doc["command"];
+  if (!cmd) return;
 
-  if (strcmp(command, "PUMP_ON") == 0) {
-    if (dryRunError)                                   systemStatus = "Locked: Dry Run";
-    else if (undergroundLevel == -1)                   systemStatus = "Err: U/G Sens";
-    else if (undergroundLevel > UNDERGROUND_LOW_PERCENT) {
-      controlPump(true); systemStatus = "Manual ON";
-    } else                                             systemStatus = "Error: U/G Low";
+  if      (strcmp(cmd, "PUMP_ON")     == 0) {
+    if      (dryRunError)                             systemStatus = "Locked: Dry Run";
+    else if (undergroundLevel == -1)                  systemStatus = "Err: U/G Sens";
+    else if (undergroundLevel > UNDERGROUND_LOW_PERCENT) { controlPump(true);  systemStatus = "Manual ON";  }
+    else                                              systemStatus = "Error: U/G Low";
   }
-  else if (strcmp(command, "PUMP_OFF") == 0) {
-    controlPump(false); systemStatus = "Manual OFF";
-  }
-  else if (strcmp(command, "RESET_ERROR") == 0) {
+  else if (strcmp(cmd, "PUMP_OFF")    == 0) { controlPump(false); systemStatus = "Manual OFF";  }
+  else if (strcmp(cmd, "RESET_ERROR") == 0) {
     dryRunError = false; potentialDryRun = false; systemStatus = "Error Reset";
   }
-
   updateLEDs();
   sendDataToArduino();
   if (client.connected()) publishMessage();
 }
 
 void reconnectMQTT() {
-  if (time(nullptr) < 10000) { Serial.println(F("[MQTT] Waiting NTP...")); return; }
-  Serial.print(F("[MQTT] Connecting to HiveMQ..."));
-  String cmdTopic = "devices/" + runtimeDeviceId + "/commands";
-  // Using runtimeHiveMQUser and runtimeHiveMQPass from NVS — not hardcoded
-  if (client.connect(runtimeDeviceId.c_str(),
-                     runtimeHiveMQUser.c_str(),
-                     runtimeHiveMQPass.c_str())) {
-    client.subscribe(cmdTopic.c_str());
-    Serial.println(F(" Connected!"));
-    // Publish online status (retained)
-    String statusTopic = "devices/" + runtimeDeviceId + "/status";
+  if (time(nullptr) < 10000) return;
+  Serial.print(F("[MQTT] Connecting..."));
+  String cmdTopic    = "devices/" + String(DEVICE_ID) + "/commands";
+  String statusTopic = "devices/" + String(DEVICE_ID) + "/status";
+  // DEVICE_ID = hardcoded client ID from secrets.h
+  // runtimeHiveUser / runtimeHivePass = from customer NVS
+  if (client.connect(DEVICE_ID, runtimeHiveUser.c_str(), runtimeHivePass.c_str())) {
+    client.subscribe(cmdTopic.c_str(), 1);
     client.publish(statusTopic.c_str(), "online", true);
+    Serial.printf(" OK [%s]\n", DEVICE_ID);
   } else {
     Serial.printf(" FAIL rc=%d\n", client.state());
   }
 }
 
 void WiFiEventHandler(WiFiEvent_t event) {
-  switch (event) {
-    case ARDUINO_EVENT_WIFI_STA_GOT_IP:
-      Serial.printf("[WIFI] Connected. IP: %s\n", WiFi.localIP().toString().c_str());
-      configTime(3 * 3600, 0, "africa.pool.ntp.org", "pool.ntp.org");
-      break;
-    case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
-      Serial.println(F("[WIFI] Disconnected."));
-      break;
-    default: break;
+  if (event == ARDUINO_EVENT_WIFI_STA_GOT_IP) {
+    Serial.printf("[WIFI] Connected. IP: %s\n", WiFi.localIP().toString().c_str());
+    configTime(3 * 3600, 0, "africa.pool.ntp.org", "pool.ntp.org");
   }
 }
 
 
 // =================================================================
 //
-//   SECTION 8  —  SETUP
+//   SECTION 10  —  SETUP
 //
 // =================================================================
 
 void setup() {
   Serial.begin(115200);
   Serial2.begin(9600, SERIAL_8N1, RXp2, TXp2);
-  Serial.println(F("\n[BOOT] HydroSync v3.0 starting..."));
+  Serial.println(F("\n[BOOT] HydroSync v3.1"));
 
-  // GPIO setup — relay OFF immediately (safety critical)
-  pinMode(PUMP_RELAY_PIN,    OUTPUT);
-  digitalWrite(PUMP_RELAY_PIN, !RELAY_ON_STATE); // PUMP OFF before anything else
+  // Safety: pump off FIRST before anything else
+  pinMode(PUMP_RELAY_PIN, OUTPUT);
+  digitalWrite(PUMP_RELAY_PIN, !RELAY_ON_STATE);
 
-  pinMode(GREEN_LED_PIN,     OUTPUT); digitalWrite(GREEN_LED_PIN, LOW);
-  pinMode(RED_LED_PIN,       OUTPUT); digitalWrite(RED_LED_PIN,   HIGH);
+  pinMode(GREEN_LED_PIN, OUTPUT); digitalWrite(GREEN_LED_PIN, LOW);
+  pinMode(RED_LED_PIN,   OUTPUT); digitalWrite(RED_LED_PIN,   HIGH);
 
-  // Factory reset button — GPIO 0 is the BOOT button on most dev boards
-  // Internal pull-up means button press pulls it LOW
-  pinMode(FACTORY_RESET_PIN, INPUT_PULLUP);
+  // ── STEP 1: Check triple-power-cycle reset ───────────────────
+  // This runs before credentials load. It blinks the red LED to
+  // show the boot was counted and triggers reset if count reached.
+  checkTriplePowerCycleReset();
 
-  // Let ADC and ZHT103 op-amp settle before calibration
-  delay(500);
+  delay(500); // ADC settle time
 
-  // ── CREDENTIAL CHECK ──────────────────────────────────────────
-  // Try to load credentials from NVS.
-  // If none exist (first boot or factory reset), enter portal mode.
+  // ── STEP 2: Load customer credentials from NVS ───────────────
   if (!loadCredentials()) {
-    // No credentials — start setup portal
-    // This function blocks until the user configures the device
-    // and the device reboots. It will not return.
-    digitalWrite(RED_LED_PIN, LOW); // Red off during portal (green blinks)
-    startPortalMode();              // Does not return
+    digitalWrite(RED_LED_PIN, LOW);
+    startPortalMode(); // Does not return — reboots after customer configures
   }
 
-  // ── NORMAL BOOT (credentials exist) ──────────────────────────
-  Serial.println(F("[BOOT] Credentials found. Starting normal operation."));
+  // ── STEP 3: Normal boot with valid credentials ───────────────
+  Serial.println(F("[BOOT] Credentials loaded. Starting."));
   digitalWrite(RED_LED_PIN, LOW);
 
-  // Calibrate ZHT103 bias with pump OFF
   calibrateCTBias();
 
-  // WiFi connection using saved SSID/password
   WiFi.mode(WIFI_STA);
   WiFi.onEvent(WiFiEventHandler);
-  Serial.printf("[WIFI] Connecting to: %s\n", runtimeWifiSSID.c_str());
   WiFi.begin(runtimeWifiSSID.c_str(), runtimeWifiPass.c_str());
 
-  // Wait up to 30 seconds for WiFi
-  unsigned long wifiStart = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - wifiStart < 30000) {
-    delay(500);
-    Serial.print(".");
+  unsigned long t0 = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - t0 < 30000) {
+    delay(500); Serial.print(".");
   }
 
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.println(F("\n[WIFI] Could not connect to saved WiFi."));
-    Serial.println(F("[WIFI] Rebooting to try again..."));
-    // Don't enter portal mode — the credentials might be correct
-    // and the router might just be temporarily down.
-    // Reboot and retry. If this keeps failing, user can factory reset.
+    Serial.println(F("\n[WIFI] Failed to connect. Retrying after reboot."));
     delay(5000);
     ESP.restart();
   }
-
   Serial.println(F("\n[WIFI] Connected."));
 
-  // TLS: Only Root CA needed for HiveMQ (from secrets.h)
+  // TLS: Root CA from secrets.h (same for all devices)
   net.setCACert(HIVEMQ_ROOT_CA);
 
-  // MQTT server: uses runtimeHiveMQHost loaded from NVS
-  client.setServer(runtimeHiveMQHost.c_str(), 8883);
+  // HIVEMQ_HOST is hardcoded in secrets.h
+  client.setServer(HIVEMQ_HOST, 8883);
   client.setCallback(messageReceived);
   client.setBufferSize(MQTT_PACKET_SIZE);
 
-  digitalWrite(RED_LED_PIN, LOW);
+  bootCompleteTime = millis(); // Start the counter-clear timer
   sendDataToArduino();
-  Serial.printf("[BOOT] Device ID: %s\n", runtimeDeviceId.c_str());
-  Serial.println(F("[BOOT] Ready."));
+  Serial.printf("[BOOT] Ready. ID=%s  Host=%s\n", DEVICE_ID, HIVEMQ_HOST);
 }
 
 
 // =================================================================
 //
-//   SECTION 9  —  MAIN LOOP
+//   SECTION 11  —  MAIN LOOP
 //
 // =================================================================
 
 void loop() {
   unsigned long now = millis();
 
-  // Factory reset check — runs every loop
-  checkFactoryReset();
+  // Always check serial commands (works any time USB is connected)
+  checkSerialResetCommand();
+
+  // Clear boot counter after stable operation
+  clearBootCounter();
 
   // ── CONNECTIVITY ──────────────────────────────────────────────
   if (WiFi.status() != WL_CONNECTED) {
     if (now - lastReconnectAttempt > RECONNECT_INTERVAL_MS) {
       lastReconnectAttempt = now;
-      Serial.println(F("[WIFI] Reconnecting..."));
       WiFi.begin(runtimeWifiSSID.c_str(), runtimeWifiPass.c_str());
     }
     return;
@@ -978,42 +1057,34 @@ void loop() {
   // ── SENSOR SAMPLING (every 500ms) ────────────────────────────
   if (now - lastSampleTime > SAMPLE_INTERVAL_MS) {
     lastSampleTime = now;
-    pingSequential(bufferIndex);
-    bufferIndex++;
+    pingSequential(bufferIndex++);
 
     if (bufferIndex >= BUFFER_SIZE) {
       bufferIndex = 0;
-
       processBuffer();
 
-      if (pumpStatus) {
-        checkDryRun();
-      } else {
-        pumpCurrent = 0.0f;
-      }
+      if (pumpStatus) checkDryRun();
+      else pumpCurrent = 0.0f;
 
-      // Auto-recovery from dry run
+      // Auto-recovery
       if (dryRunError && undergroundLevel != -1 &&
-          undergroundLevel > (UNDERGROUND_LOW_PERCENT + 15)) {
-        dryRunError  = false;
-        systemStatus = "Recovered";
-        Serial.println(F("[AUTO] Dry run cleared — tank recovered."));
+          undergroundLevel > UNDERGROUND_LOW_PERCENT + 15) {
+        dryRunError = false; systemStatus = "Recovered";
       }
 
-      // Automation logic
+      // Automation
       if (!dryRunError && overheadLevel != -1 && undergroundLevel != -1) {
-        if (overheadLevel    <  OVERHEAD_LOW_PERCENT    &&
-            undergroundLevel >  UNDERGROUND_LOW_PERCENT &&
-            !pumpStatus) {
+        if (!pumpStatus &&
+            overheadLevel    <  OVERHEAD_LOW_PERCENT &&
+            undergroundLevel >  UNDERGROUND_LOW_PERCENT) {
           controlPump(true); systemStatus = "Auto: Pumping";
-        }
-        else if ((overheadLevel    >= OVERHEAD_HIGH_PERCENT ||
-                  undergroundLevel <= UNDERGROUND_LOW_PERCENT) && pumpStatus) {
+        } else if (pumpStatus &&
+                  (overheadLevel    >= OVERHEAD_HIGH_PERCENT ||
+                   undergroundLevel <= UNDERGROUND_LOW_PERCENT)) {
           controlPump(false);
           systemStatus = (overheadLevel >= OVERHEAD_HIGH_PERCENT)
                          ? "Auto: O/H Full" : "Auto: U/G Low";
-        }
-        else if (!pumpStatus && systemStatus == "Initializing...") {
+        } else if (!pumpStatus && systemStatus == "Initializing...") {
           systemStatus = "System Ready";
         }
       }

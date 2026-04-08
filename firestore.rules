@@ -318,6 +318,12 @@ service cloud.firestore {
       allow read, update, delete: if isAdmin();
     }
 
+    // MQTT hosts collection - for managing broker URLs
+    match /mqtt_hosts/{hostId} {
+      // Admins can manage MQTT hosts
+      allow read, write: if isAdmin();
+    }
+
 
   }
 }

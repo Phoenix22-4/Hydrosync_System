@@ -1,14 +1,15 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { auth } from '../../firebase';
+import { auth, db } from '../../firebase';
 import { useAuth } from '../../App';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Settings, LogOut, ArrowLeft, Shield, Mail, User, Bell, Database, 
   Key, Smartphone, Globe, Clock, ChevronRight, AlertTriangle, RefreshCw,
-  Trash2, Download, Moon, Volume2, Lock
+  Trash2, Download, Moon, Volume2, Lock, Plus, X, Save
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { doc, getDoc, setDoc, updateDoc, collection, getDocs, deleteDoc } from 'firebase/firestore';
 
 export default function AdminSettings() {
   const { user, profile } = useAuth();
@@ -32,6 +33,7 @@ export default function AdminSettings() {
     { id: 'account', label: 'Account', icon: <User className="w-4 h-4" />, desc: 'Profile, security, and login settings' },
     { id: 'notifications', label: 'Notifications', icon: <Bell className="w-4 h-4" />, desc: 'Alert and notification preferences' },
     { id: 'system', label: 'System', icon: <Database className="w-4 h-4" />, desc: 'Bridge status, simulation controls' },
+    { id: 'mqtt', label: 'MQTT Hosts', icon: <Globe className="w-4 h-4" />, desc: 'Manage HiveMQ broker URLs' },
     { id: 'data', label: 'Data Management', icon: <RefreshCw className="w-4 h-4" />, desc: 'Export, backup, and reset options' },
   ];
 
@@ -79,7 +81,7 @@ export default function AdminSettings() {
 
         <div className="p-8 max-w-4xl mx-auto w-full space-y-6">
           {/* Settings Navigation */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             {settingsSections.map(section => (
               <button
                 key={section.id}
@@ -180,6 +182,90 @@ export default function AdminSettings() {
                   
                   <div className="pt-4 border-t border-white/5">
                     <SettingsButton icon={<RefreshCw className="w-4 h-4" />} label="Restart Simulation" onClick={() => window.location.reload()} />
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {activeSection === 'mqtt' && (
+              <motion.div
+                key="mqtt"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="bg-[#111827] rounded-2xl border border-white/5 overflow-hidden shadow-sm"
+              >
+                <div className="p-6 border-b border-white/5">
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                    <Globe className="w-5 h-5 text-blue-500" />
+                    MQTT Host Management
+                  </h3>
+                </div>
+                <div className="p-6 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-slate-400">Configure HiveMQ broker URLs for device communication</p>
+                    <button className="px-4 py-2 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors">
+                      <Plus className="w-4 h-4" />
+                      Add Host
+                    </button>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <div className="bg-[#1a2234] border border-white/5 rounded-xl p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-green-500/10 rounded-lg flex items-center justify-center">
+                            <Globe className="w-4 h-4 text-green-500" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-white">mqtt.hydrosync.io</p>
+                            <p className="text-xs text-slate-500">Primary broker - Active</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button className="p-2 hover:bg-white/5 rounded-lg text-slate-400 hover:text-white transition-colors">
+                            <Settings className="w-4 h-4" />
+                          </button>
+                          <button className="p-2 hover:bg-red-500/10 rounded-lg text-slate-400 hover:text-red-400 transition-colors">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="bg-[#1a2234] border border-white/5 rounded-xl p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-yellow-500/10 rounded-lg flex items-center justify-center">
+                            <Globe className="w-4 h-4 text-yellow-500" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-white">mqtt-backup.hydrosync.io</p>
+                            <p className="text-xs text-slate-500">Backup broker - Standby</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button className="p-2 hover:bg-white/5 rounded-lg text-slate-400 hover:text-white transition-colors">
+                            <Settings className="w-4 h-4" />
+                          </button>
+                          <button className="p-2 hover:bg-red-500/10 rounded-lg text-slate-400 hover:text-red-400 transition-colors">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="pt-4 border-t border-white/5">
+                    <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+                      <div className="flex items-start gap-3">
+                        <Globe className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-sm font-bold text-blue-400">MQTT Configuration</p>
+                          <p className="text-xs text-slate-500 mt-1">Devices will automatically connect to the first available broker. Add backup hosts for redundancy.</p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </motion.div>
