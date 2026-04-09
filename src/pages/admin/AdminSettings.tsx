@@ -141,17 +141,42 @@ export default function AdminSettings() {
     await exportAllData();
   };
 
+  const deleteDeviceSubcollections = async (deviceId: string) => {
+    const telemetryRef = collection(db, 'devices', deviceId, 'telemetry');
+    const pumpEventsRef = collection(db, 'devices', deviceId, 'pump_events');
+    const historyRef = collection(db, 'devices', deviceId, 'history');
+
+    const [telemetrySnapshot, pumpEventsSnapshot, historySnapshot] = await Promise.all([
+      getDocs(telemetryRef),
+      getDocs(pumpEventsRef),
+      getDocs(historyRef)
+    ]);
+
+    const deleteDocs = [
+      ...telemetrySnapshot.docs,
+      ...pumpEventsSnapshot.docs,
+      ...historySnapshot.docs
+    ].map(doc => deleteDoc(doc.ref));
+
+    await Promise.all(deleteDocs);
+  };
+
+  const deleteCollection = async (collectionName: string) => {
+    const snapshot = await getDocs(collection(db, collectionName));
+    const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref));
+    await Promise.all(deletePromises);
+  };
+
   const clearAllTelemetry = async () => {
     if (!confirm('Are you sure you want to clear all telemetry data? This cannot be undone.')) return;
     try {
       setLoading(true);
       const devicesSnapshot = await getDocs(collection(db, 'devices'));
-      for (const deviceDoc of devicesSnapshot.docs) {
-        const historyRef = collection(db, 'devices', deviceDoc.id, 'history');
-        const historySnapshot = await getDocs(historyRef);
-        const deletePromises = historySnapshot.docs.map(doc => deleteDoc(doc.ref));
-        await Promise.all(deletePromises);
-      }
+      const deletionPromises = devicesSnapshot.docs.map(async (deviceDoc) => {
+        await deleteDeviceSubcollections(deviceDoc.id);
+      });
+      await Promise.all(deletionPromises);
+      await deleteCollection('telemetry');
       alert('All telemetry data cleared successfully');
     } catch (error) {
       console.error('Error clearing telemetry:', error);
@@ -165,13 +190,32 @@ export default function AdminSettings() {
     if (!confirm('Are you sure you want to reset the system? This will delete all data except users. This cannot be undone.')) return;
     try {
       setLoading(true);
-      // Delete all collections except users
-      const collections = ['devices', 'mqtt_hosts', 'email_tokens'];
-      for (const coll of collections) {
-        const snapshot = await getDocs(collection(db, coll));
-        const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref));
-        await Promise.all(deletePromises);
+      const collectionsToDelete = [
+        'devices',
+        'mqtt_hosts',
+        'email_tokens',
+        'alerts',
+        'activity_log',
+        'commands',
+        'device_tokens',
+        'token_requests',
+        'telemetry',
+        'aggregate_hourly',
+        'system'
+      ];
+
+      for (const coll of collectionsToDelete) {
+        if (coll === 'devices') {
+          const deviceSnapshot = await getDocs(collection(db, 'devices'));
+          for (const deviceDoc of deviceSnapshot.docs) {
+            await deleteDeviceSubcollections(deviceDoc.id);
+            await deleteDoc(doc(db, 'devices', deviceDoc.id));
+          }
+        } else {
+          await deleteCollection(coll);
+        }
       }
+
       alert('System reset successfully');
     } catch (error) {
       console.error('Error resetting system:', error);
@@ -187,7 +231,13 @@ export default function AdminSettings() {
       return;
     }
     if (!confirm('SUPERUSER ACTION: Are you sure you want to delete ALL data except users? This cannot be undone.')) return;
-    await resetSystem();
+    try {
+      await resetSystem();
+      alert('All non-user data deleted successfully');
+    } catch (error) {
+      console.error('Error deleting all data:', error);
+      alert('Failed to delete all non-user data');
+    }
   };
 
   const handleLogout = async () => {
