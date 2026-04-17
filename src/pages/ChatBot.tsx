@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, Send, MessageSquare, Droplets, Info, HelpCircle, AlertCircle, Smartphone, Loader2 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { GoogleGenAI } from "@google/genai";
 import { USER_DOCUMENTATION } from '../constants/docs';
 
 interface Message {
@@ -21,10 +20,6 @@ export default function ChatBot() {
   const [isTyping, setIsTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
-
-  // Initialize Gemini with API key from environment variable
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
-  const ai = new GoogleGenAI({ apiKey });
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -48,29 +43,25 @@ export default function ChatBot() {
     setIsTyping(true);
 
     try {
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: currentInput }]
-          }
-        ],
-        config: {
-          systemInstruction: `You are HydroSync AI, a helpful and human-like assistant for the HydroSync water management app. 
-          Use the following USER DOCUMENTATION to answer questions. 
-          Do NOT copy-paste the documentation. Instead, explain it in a friendly, conversational way, like a deep-learning AI (Gemini).
-          If the user asks something NOT in the documentation, use your general knowledge but stay focused on water management and technology.
-          
-          USER DOCUMENTATION:
-          ${USER_DOCUMENTATION}`,
-          temperature: 0.7,
-        }
+      const fetchResponse = await fetch('/.netlify/functions/ai_chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: currentInput,
+          documentation: USER_DOCUMENTATION,
+        }),
       });
+
+      const json = await fetchResponse.json();
+      if (!fetchResponse.ok) {
+        throw new Error(json.error || 'AI request failed');
+      }
 
       const botMsg: Message = {
         id: (Date.now() + 1).toString(),
-        text: response.text || "I'm sorry, I'm having trouble connecting right now. Please try again later.",
+        text: json.result || "I'm sorry, I'm having trouble connecting right now. Please try again later.",
         sender: 'bot',
         timestamp: new Date()
       };
