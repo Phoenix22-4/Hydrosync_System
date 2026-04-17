@@ -243,7 +243,7 @@ Refer to the `MQTT_BRIDGE_TEMPLATE.md` file for the complete reference implement
 - Set `APP_URL` to the deployed web app URL used by your hosting environment.
 - Example `.env.local`:
 ```
-GEMINI_API_KEY="AIzaSyDZ3lsOhZ4HRY9JmZlgulOjRrZ5KYZWdpk"
+GEMINI_API_KEY="your_gemini_api_key_here"
 APP_URL="https://your-app-url.example"
 ```
 - Do not commit `.env.local` to source control.
