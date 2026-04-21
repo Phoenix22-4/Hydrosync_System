@@ -15,6 +15,8 @@ export default function AdminLogin() {
   const [loading, setLoading] = useState(false);
   const [accessDenied, setAccessDenied] = useState(false);
   const [deniedReason, setDeniedReason] = useState<string>('');
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallPrompt, setShowInstallPrompt] = useState(false);
   const navigate = useNavigate();
   const { user, isAdmin, loading: authLoading, profile } = useAuth();
 
@@ -24,6 +26,33 @@ export default function AdminLogin() {
       navigate('/admin', { replace: true });
     }
   }, [authLoading, user, isAdmin, navigate]);
+
+  // PWA Install Prompt
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowInstallPrompt(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        console.log('User accepted the install prompt');
+      }
+      setDeferredPrompt(null);
+      setShowInstallPrompt(false);
+    }
+  };
 
   const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -155,6 +184,27 @@ export default function AdminLogin() {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-6 bg-[#0f172a] relative">
+      {/* Install Prompt Banner */}
+      {showInstallPrompt && (
+        <div className="absolute top-8 right-8 bg-cyan-500/10 border border-cyan-500/20 rounded-xl p-4 shadow-lg max-w-sm">
+          <p className="text-cyan-400 text-sm font-bold mb-2">Install Admin App</p>
+          <p className="text-slate-400 text-xs mb-3">Get the full HydroSync Admin experience on your device.</p>
+          <div className="flex gap-2">
+            <button
+              onClick={handleInstallClick}
+              className="bg-cyan-500 hover:bg-cyan-400 text-white text-xs font-bold px-3 py-1 rounded-lg transition-colors"
+            >
+              Install
+            </button>
+            <button
+              onClick={() => setShowInstallPrompt(false)}
+              className="text-slate-500 hover:text-slate-300 text-xs font-bold px-3 py-1"
+            >
+              Later
+            </button>
+          </div>
+        </div>
+      )}
       <div className="absolute top-8 left-8">
         <button 
           onClick={() => navigate('/')}

@@ -11,7 +11,8 @@ const config: CapacitorConfig = {
   android: {
     buildOptions: {
       keystorePath: undefined,
-      keystoreAlias: undefined
+      keystoreAlias: undefined,
+      javaVersion: '17'
     }
   },
   plugins: {
@@ -22,10 +23,7 @@ const config: CapacitorConfig = {
   },
   ios: {},
   web: {},
-  bundledWebRuntime: false,
-  icon: 'public/icon.png'
-};
-  icon: 'public/icon.png'
+  bundledWebRuntime: false
 };
 
 export default config;

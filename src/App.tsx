@@ -7,6 +7,7 @@ import { UserProfile } from './types';
 import { motion, AnimatePresence } from 'motion/react';
 import { AlertTriangle, ShieldCheck, Loader2, CheckCircle2 } from 'lucide-react';
 import { useNotifications } from './hooks/useNotifications';
+import { Capacitor } from '@capacitor/core';
 
 // Lazy Load Pages for Security & Performance (F12 Console Protection)
 const LandingPage = lazy(() => import('./pages/LandingPage'));
@@ -150,8 +151,8 @@ export default function App() {
           <Suspense fallback={<LoadingScreen />}>
             <AnimatePresence mode="wait">
               <Routes>
-                {/* Public Website */}
-                <Route path="/" element={<LandingPage />} />
+                {/* Public Website or App Login */}
+                <Route path="/" element={Capacitor.isNativePlatform() ? <Login /> : <LandingPage />} />
                 
                 {/* Auth Routes */}
                 <Route path="/login" element={<Login />} />
@@ -313,7 +314,7 @@ function AdminRoute({ loading, isAdmin, user, children }: { loading: boolean; is
   // If no user or not admin, redirect to admin login
   if (!user || !isAdmin) {
     // Save the attempted URL for redirect after login
-    return <Navigate to="/admin-login" state={{ from: location }} replace />;
+    return <Navigate to="/setup_Adminhydro" state={{ from: location }} replace />;
   }
   
   return <>{children}</>;
