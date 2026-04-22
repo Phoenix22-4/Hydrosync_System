@@ -274,7 +274,7 @@ export default function LandingPage() {
               className="bg-[#1e293b] border border-white/10 text-white text-xs rounded-lg focus:ring-cyan-500 focus:border-cyan-500 block p-2 outline-none"
               onChange={(e) => {
                 const val = e.target.value;
-                if (val === '/setup_Adminhydro') {
+                if (val === '/setup_adminhydro') {
                   navigate(val);
                 } else {
                   const target = document.getElementById(val.substring(1));

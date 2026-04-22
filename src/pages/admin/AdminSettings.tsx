@@ -16,10 +16,11 @@ export default function AdminSettings() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [activeSection, setActiveSection] = useState<'account' | 'notifications' | 'system' | 'mqtt' | 'data' | null>('account');
-  const [mqttHosts, setMqttHosts] = useState<Array<{id: string, url: string, status: 'active' | 'inactive'}>>([]);
+  const [mqttHosts, setMqttHosts] = useState<Array<{id: string, url: string, status: 'active' | 'inactive', device_id?: string | null}>>([]);
   const [newHostUrl, setNewHostUrl] = useState('');
+  const [newHostDeviceId, setNewHostDeviceId] = useState('');
   const [editingHost, setEditingHost] = useState<string | null>(null);
-  const [editUrl, setEditUrl] = useState('');
+  const [editForm, setEditForm] = useState({ url: '', deviceId: '' });
   const [notificationSettings, setNotificationSettings] = useState({
     emailAlerts: true,
     pushNotifications: true,
@@ -54,7 +55,7 @@ export default function AdminSettings() {
       const hosts = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
-      })) as Array<{id: string, url: string, status: 'active' | 'inactive'}>;
+      })) as Array<{id: string, url: string, status: 'active' | 'inactive', device_id?: string | null}>;
       setMqttHosts(hosts);
     } catch (error) {
       console.error('Error loading MQTT hosts:', error);
@@ -66,9 +67,11 @@ export default function AdminSettings() {
     try {
       await addDoc(collection(db, 'mqtt_hosts'), {
         url: newHostUrl.trim(),
-        status: 'active'
+        status: 'active',
+        device_id: newHostDeviceId.trim() || null,
       });
       setNewHostUrl('');
+      setNewHostDeviceId('');
       loadMqttHosts();
     } catch (error) {
       console.error('Error adding MQTT host:', error);
@@ -76,13 +79,14 @@ export default function AdminSettings() {
   };
 
   const updateMqttHost = async (id: string) => {
-    if (!editUrl.trim()) return;
+    if (!editForm.url.trim()) return;
     try {
       await updateDoc(doc(db, 'mqtt_hosts', id), {
-        url: editUrl.trim()
+        url: editForm.url.trim(),
+        device_id: editForm.deviceId.trim() || null,
       });
       setEditingHost(null);
-      setEditUrl('');
+      setEditForm({ url: '', deviceId: '' });
       loadMqttHosts();
     } catch (error) {
       console.error('Error updating MQTT host:', error);
@@ -452,13 +456,22 @@ export default function AdminSettings() {
                   <div className="flex flex-col lg:flex-row lg:items-center gap-3 lg:justify-between">
                     <p className="text-sm text-slate-400">Configure HiveMQ broker URLs for device communication</p>
                     <div className="flex flex-col sm:flex-row gap-2">
-                      <input
-                        type="url"
-                        value={newHostUrl}
-                        onChange={(e) => setNewHostUrl(e.target.value)}
-                        placeholder="mqtt://broker.hivemq.com"
-                        className="bg-[#1a2234] border border-white/5 rounded-lg px-3 py-2 text-white text-sm w-full sm:w-64"
-                      />
+                      <div className="flex flex-col sm:flex-row gap-2 w-full">
+                        <input
+                          type="url"
+                          value={newHostUrl}
+                          onChange={(e) => setNewHostUrl(e.target.value)}
+                          placeholder="70f11a2fa15842628bf9227997bb4ba9.s1.eu.hivemq.cloud"
+                          className="bg-[#1a2234] border border-white/5 rounded-lg px-3 py-2 text-white text-sm w-full"
+                        />
+                        <input
+                          type="text"
+                          value={newHostDeviceId}
+                          onChange={(e) => setNewHostDeviceId(e.target.value)}
+                          placeholder="Device ID (optional)"
+                          className="bg-[#1a2234] border border-white/5 rounded-lg px-3 py-2 text-white text-sm w-full sm:w-52"
+                        />
+                      </div>
                       <button 
                         onClick={addMqttHost}
                         disabled={!newHostUrl.trim()}
@@ -488,10 +501,17 @@ export default function AdminSettings() {
                               <div className="flex-1 flex gap-2">
                                 <input
                                   type="url"
-                                  value={editUrl}
-                                  onChange={(e) => setEditUrl(e.target.value)}
+                                  value={editForm.url}
+                                  onChange={(e) => setEditForm(prev => ({ ...prev, url: e.target.value }))}
                                   className="flex-1 bg-[#0f172a] border border-white/5 rounded-lg px-3 py-2 text-white text-sm"
-                                  placeholder="mqtt://broker.hivemq.com"
+                                  placeholder="70f11a2fa15842628bf9227997bb4ba9.s1.eu.hivemq.cloud"
+                                />
+                                <input
+                                  type="text"
+                                  value={editForm.deviceId}
+                                  onChange={(e) => setEditForm(prev => ({ ...prev, deviceId: e.target.value }))}
+                                  className="bg-[#0f172a] border border-white/5 rounded-lg px-3 py-2 text-white text-sm w-40"
+                                  placeholder="Device ID"
                                 />
                                 <button
                                   onClick={() => updateMqttHost(host.id)}
@@ -500,7 +520,10 @@ export default function AdminSettings() {
                                   <Save className="w-4 h-4" />
                                 </button>
                                 <button
-                                  onClick={() => setEditingHost(null)}
+                                  onClick={() => {
+                                    setEditingHost(null);
+                                    setEditForm({ url: '', deviceId: '' });
+                                  }}
                                   className="px-3 py-2 bg-slate-500/10 hover:bg-slate-500/20 text-slate-400 rounded-lg text-sm"
                                 >
                                   <X className="w-4 h-4" />
@@ -509,6 +532,7 @@ export default function AdminSettings() {
                             ) : (
                               <div className="flex-1">
                                 <p className="text-sm font-bold text-white">{host.url}</p>
+                                <p className="text-xs text-slate-400">Device binding: {host.device_id || 'Global fallback'}</p>
                                 <p className="text-xs text-slate-500">{host.status === 'active' ? 'Active' : 'Inactive'}</p>
                               </div>
                             )}
@@ -518,7 +542,7 @@ export default function AdminSettings() {
                               <button
                                 onClick={() => {
                                   setEditingHost(host.id);
-                                  setEditUrl(host.url);
+                                  setEditForm({ url: host.url, deviceId: host.device_id || '' });
                                 }}
                                 className="p-2 hover:bg-white/5 rounded-lg text-slate-400 hover:text-white transition-colors"
                               >
@@ -562,7 +586,7 @@ export default function AdminSettings() {
                         <Globe className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
                         <div>
                           <p className="text-sm font-bold text-blue-400">MQTT Configuration</p>
-                          <p className="text-xs text-slate-500 mt-1">Devices will automatically connect to the first available active broker. Add backup hosts for redundancy and scalability.</p>
+                          <p className="text-xs text-slate-500 mt-1">When multiple hosts are active, the system first matches by device ID. If no device-specific host is found, it uses a global active host.</p>
                         </div>
                       </div>
                     </div>

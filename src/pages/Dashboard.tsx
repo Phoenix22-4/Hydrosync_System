@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   collection, query, where, onSnapshot, doc, updateDoc,
-  orderBy, limit, addDoc, serverTimestamp, getDocs
+  orderBy, addDoc, serverTimestamp, getDocs
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../App';
@@ -145,16 +145,27 @@ export default function Dashboard() {
   }, [user, activeDeviceIdx]);
 
   useEffect(() => {
-    const q = query(collection(db, 'mqtt_hosts'), where('status', '==', 'active'), limit(1));
+    const q = query(collection(db, 'mqtt_hosts'), where('status', '==', 'active'));
     return onSnapshot(q, (snapshot) => {
-      if (!snapshot.empty) {
-        const firstHost = snapshot.docs[0].data() as { url?: string };
-        setFallbackBroker(firstHost.url?.trim() || null);
-      } else {
+      if (snapshot.empty) {
         setFallbackBroker(null);
+        return;
       }
+
+      const hosts = snapshot.docs.map((docSnap) => docSnap.data() as { url?: string; device_id?: string | null });
+      const currentDeviceId = activeDevice?.device_id || activeDevice?.id;
+
+      const boundHost = hosts.find((host) =>
+        host.device_id &&
+        currentDeviceId &&
+        host.device_id.trim().toLowerCase() === currentDeviceId.trim().toLowerCase()
+      );
+
+      const globalHost = hosts.find((host) => !host.device_id || !host.device_id.trim());
+      const selected = boundHost || globalHost || hosts[0];
+      setFallbackBroker(selected?.url?.trim() || null);
     });
-  }, []);
+  }, [activeDevice?.device_id, activeDevice?.id]);
 
   // ── MQTT Subscription for Live Data ──────────────────
   useEffect(() => {

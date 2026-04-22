@@ -164,7 +164,7 @@ export default function App() {
                 <Route path="/add-device" element={<AddDevice />} />
                 
                 {/* Secure Admin Entry Link */}
-                <Route path="/setup_Adminhydro" element={<AdminLogin />} />
+                <Route path="/setup_adminhydro" element={<AdminLogin />} />
 
                 {/* User App Routes (Hidden from Landing Page, accessible via direct link/APK) */}
                 <Route
@@ -327,7 +327,7 @@ function AdminRoute({ loading, isAdmin, user, children }: { loading: boolean; is
   // If no user or not admin, redirect to admin login
   if (!user || !isAdmin) {
     // Save the attempted URL for redirect after login
-    return <Navigate to="/setup_Adminhydro" state={{ from: location }} replace />;
+    return <Navigate to="/setup_adminhydro" state={{ from: location }} replace />;
   }
   
   return <>{children}</>;

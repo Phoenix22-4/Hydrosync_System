@@ -284,7 +284,7 @@ export default function AdminDocumentation() {
 
   useEffect(() => {
     if (!isAdmin) {
-      navigate('/setup_Adminhydro');
+      navigate('/setup_adminhydro');
     }
   }, [isAdmin, navigate]);
 
