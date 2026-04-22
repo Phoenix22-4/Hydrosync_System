@@ -56,13 +56,21 @@ export default function Dashboard() {
 
   const activeDevice = devices[activeDeviceIdx] ?? devices[0];
   const resolvedBroker = activeDevice?.mqtt_broker || fallbackBroker;
+  const toWsBrokerUrl = (rawBroker: string) => {
+    const trimmed = rawBroker.trim();
+    if (!trimmed) return '';
+    if (trimmed.startsWith('ws://') || trimmed.startsWith('wss://')) return trimmed;
+    if (trimmed.startsWith('http://')) return `ws://${trimmed.slice(7)}`;
+    if (trimmed.startsWith('https://')) return `wss://${trimmed.slice(8)}`;
+    if (trimmed.includes('/mqtt')) return `wss://${trimmed}`;
+    if (/:([0-9]{2,5})$/i.test(trimmed)) return `wss://${trimmed}/mqtt`;
+    return `wss://${trimmed}:8884/mqtt`;
+  };
 
   // ── MQTT Connection ──────────────────────────────────
   const { isConnected: mqttConnected, subscribe, publish: mqttPublish } = useMQTT(
     resolvedBroker ? (
-      resolvedBroker.startsWith('ws://') || resolvedBroker.startsWith('wss://')
-        ? resolvedBroker
-        : `wss://${resolvedBroker}:8884/mqtt`
+      toWsBrokerUrl(resolvedBroker)
     ) : undefined,
     {
       username: activeDevice?.mqtt_username,
@@ -341,10 +349,7 @@ export default function Dashboard() {
       } else if (resolvedBroker) {
         // Fallback: create temporary connection
         try {
-          let brokerUrl = resolvedBroker;
-          if (!brokerUrl.startsWith('ws://') && !brokerUrl.startsWith('wss://')) {
-            brokerUrl = `wss://${brokerUrl}:8884/mqtt`;
-          }
+          const brokerUrl = toWsBrokerUrl(resolvedBroker);
           const client = mqtt.connect(brokerUrl, {
             username: activeDevice.mqtt_username,
             password: activeDevice.mqtt_password,

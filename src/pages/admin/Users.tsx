@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { collection, query, onSnapshot, orderBy, updateDoc, doc, deleteDoc, getDocs, where, setDoc, serverTimestamp } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../../firebase';
@@ -205,7 +205,7 @@ export default function AdminUsers() {
   return (
     <div className="flex min-h-screen bg-[#0a0f1e]">
       {/* Sidebar (Simplified) */}
-      <aside className="w-64 bg-[#111827] border-r border-white/5 flex flex-col sticky top-0 h-screen shrink-0">
+      <aside className="hidden lg:flex w-64 bg-[#111827] border-r border-white/5 flex-col sticky top-0 h-screen shrink-0">
         <div className="p-6 border-b border-white/5 flex items-center gap-3">
           <div className="w-9 h-9 bg-gradient-to-br from-blue-600 to-cyan-400 rounded-lg flex items-center justify-center shadow-lg shadow-cyan-500/20">
             <Users className="w-5 h-5 text-white" />
@@ -224,7 +224,7 @@ export default function AdminUsers() {
       </aside>
 
       <main className="flex-1 flex flex-col">
-        <header className="h-16 bg-[#111827] border-b border-white/5 px-8 flex items-center justify-between sticky top-0 z-20">
+        <header className="h-16 bg-[#111827] border-b border-white/5 px-4 md:px-8 flex items-center justify-between sticky top-0 z-20">
           <div className="flex items-center gap-4">
             <button 
               onClick={() => navigate('/admin')}
@@ -237,14 +237,14 @@ export default function AdminUsers() {
           </div>
           <button 
             onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-900 font-bold rounded-xl transition-all text-xs"
+            className="flex items-center gap-2 px-3 md:px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-900 font-bold rounded-xl transition-all text-[11px] md:text-xs"
           >
             <Plus className="w-4 h-4" />
             Add User Manually
           </button>
         </header>
 
-        <div className="p-8 space-y-6">
+        <div className="p-4 md:p-8 space-y-6">
           <div className="bg-[#111827] rounded-2xl border border-white/5 overflow-hidden shadow-sm">
             <div className="p-6 border-b border-white/5 flex flex-wrap gap-4 items-center">
               <div className="relative flex-1 min-w-[240px]">
@@ -576,4 +576,3 @@ function Link({ to, children, className }: { to: string; children: React.ReactNo
   return <button onClick={() => navigate(to)} className={className}>{children}</button>;
 }
 
-import React from 'react';

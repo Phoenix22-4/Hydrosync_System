@@ -9,7 +9,7 @@ import {
   Trash2, Download, Moon, Volume2, Lock, Plus, X, Save, Edit
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { doc, getDoc, setDoc, updateDoc, collection, getDocs, deleteDoc, addDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, collection, getDocs, deleteDoc, addDoc, writeBatch } from 'firebase/firestore';
 import mqtt from 'mqtt';
 
 export default function AdminSettings() {
@@ -68,8 +68,9 @@ export default function AdminSettings() {
   const addMqttHost = async () => {
     if (!newHostUrl.trim()) return;
     try {
+      const normalized = normalizeBrokerInput(newHostUrl);
       await addDoc(collection(db, 'mqtt_hosts'), {
-        url: newHostUrl.trim(),
+        url: normalized,
         status: 'active',
         device_id: newHostDeviceId.trim() || null,
       });
@@ -82,9 +83,34 @@ export default function AdminSettings() {
   };
 
   const toWsBrokerUrl = (rawUrl: string) => {
-    const trimmed = rawUrl.trim();
-    if (trimmed.startsWith('ws://') || trimmed.startsWith('wss://')) return trimmed;
-    return `wss://${trimmed}:8884/mqtt`;
+    const normalized = normalizeBrokerInput(rawUrl);
+    if (normalized.startsWith('ws://') || normalized.startsWith('wss://')) return normalized;
+    if (normalized.startsWith('http://')) return `ws://${normalized.slice(7)}`;
+    if (normalized.startsWith('https://')) return `wss://${normalized.slice(8)}`;
+    if (normalized.includes('/mqtt')) return `wss://${normalized}`;
+    return `wss://${normalized}:8884/mqtt`;
+  };
+
+  const normalizeBrokerInput = (input: string) => {
+    const raw = input.trim();
+    if (!raw) return '';
+
+    let noScheme = raw
+      .replace(/^wss?:\/\//i, '')
+      .replace(/^https?:\/\//i, '');
+
+    // Accept "host.8884/mqtt" and normalize to "host:8884/mqtt"
+    noScheme = noScheme.replace(/\.([0-9]{2,5})\/mqtt$/i, ':$1/mqtt');
+
+    if (/:[0-9]{2,5}\/mqtt$/i.test(noScheme) || /\/mqtt$/i.test(noScheme)) {
+      return noScheme;
+    }
+
+    if (/:[0-9]{2,5}$/i.test(noScheme)) {
+      return `${noScheme}/mqtt`;
+    }
+
+    return `${noScheme}:8884/mqtt`;
   };
 
   const testMqttHostConnection = async (hostUrl: string, key: string) => {
@@ -141,7 +167,7 @@ export default function AdminSettings() {
     if (!editForm.url.trim()) return;
     try {
       await updateDoc(doc(db, 'mqtt_hosts', id), {
-        url: editForm.url.trim(),
+        url: normalizeBrokerInput(editForm.url),
         device_id: editForm.deviceId.trim() || null,
       });
       setEditingHost(null);
@@ -193,7 +219,7 @@ export default function AdminSettings() {
       URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Error exporting data:', error);
-      alert('Failed to export data');
+      alert(`Failed to export data: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
@@ -226,8 +252,11 @@ export default function AdminSettings() {
 
   const deleteCollection = async (collectionName: string) => {
     const snapshot = await getDocs(collection(db, collectionName));
-    const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref));
-    await Promise.all(deletePromises);
+    for (let i = 0; i < snapshot.docs.length; i += 400) {
+      const batch = writeBatch(db);
+      snapshot.docs.slice(i, i + 400).forEach((docSnap) => batch.delete(docSnap.ref));
+      await batch.commit();
+    }
   };
 
   const clearAllTelemetry = async () => {
@@ -243,7 +272,7 @@ export default function AdminSettings() {
       alert('All telemetry data cleared successfully');
     } catch (error) {
       console.error('Error clearing telemetry:', error);
-      alert('Failed to clear telemetry data');
+      alert(`Failed to clear telemetry data: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
@@ -282,7 +311,7 @@ export default function AdminSettings() {
       alert('System reset successfully');
     } catch (error) {
       console.error('Error resetting system:', error);
-      alert('Failed to reset system');
+      alert(`Failed to reset system: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
@@ -517,14 +546,14 @@ export default function AdminSettings() {
                     <div className="flex flex-col sm:flex-row gap-2">
                       <div className="flex flex-col sm:flex-row gap-2 w-full">
                         <input
-                          type="url"
+                        type="text"
                           value={newHostUrl}
                           onChange={(e) => setNewHostUrl(e.target.value)}
                           placeholder="70f11a2fa15842628bf9227997bb4ba9.s1.eu.hivemq.cloud"
                           className="bg-[#1a2234] border border-white/5 rounded-lg px-3 py-2 text-white text-sm w-full"
                         />
                         <input
-                          type="text"
+                        type="text"
                           value={newHostDeviceId}
                           onChange={(e) => setNewHostDeviceId(e.target.value)}
                           placeholder="Device ID (optional)"
@@ -572,11 +601,11 @@ export default function AdminSettings() {
                             {editingHost === host.id ? (
                               <div className="flex-1 flex gap-2">
                                 <input
-                                  type="url"
+                                  type="text"
                                   value={editForm.url}
                                   onChange={(e) => setEditForm(prev => ({ ...prev, url: e.target.value }))}
                                   className="flex-1 bg-[#0f172a] border border-white/5 rounded-lg px-3 py-2 text-white text-sm"
-                                  placeholder="70f11a2fa15842628bf9227997bb4ba9.s1.eu.hivemq.cloud"
+                                  placeholder="70f11a2fa15842628bf9227997bb4ba9.s1.eu.hivemq.cloud:8884/mqtt"
                                 />
                                 <input
                                   type="text"
@@ -670,7 +699,7 @@ export default function AdminSettings() {
                         <Globe className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
                         <div>
                           <p className="text-sm font-bold text-blue-400">MQTT Configuration</p>
-                          <p className="text-xs text-slate-500 mt-1">When multiple hosts are active, the system first matches by device ID. If no device-specific host is found, it uses a global active host.</p>
+                          <p className="text-xs text-slate-500 mt-1">Use format like 70f11a2fa15842628bf9227997bb4ba9.s1.eu.hivemq.cloud:8884/mqtt. The app auto-normalizes host input and uses device-specific host first, then global fallback.</p>
                         </div>
                       </div>
                     </div>
