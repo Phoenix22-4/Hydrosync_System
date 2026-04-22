@@ -30,6 +30,11 @@ export function useMQTT(
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const subscriptionsRef = useRef<Set<string>>(new Set());
+  const onMessageRef = useRef(options?.onMessage);
+
+  useEffect(() => {
+    onMessageRef.current = options?.onMessage;
+  }, [options?.onMessage]);
 
   const connect = useCallback(() => {
     if (!brokerUrl) return;
@@ -74,8 +79,8 @@ export function useMQTT(
       });
 
       mqttClient.on('message', (topic, message) => {
-        if (options?.onMessage) {
-          options.onMessage(topic, message);
+        if (onMessageRef.current) {
+          onMessageRef.current(topic, message);
         }
       });
 
@@ -84,7 +89,7 @@ export function useMQTT(
       console.error('MQTT connection failed:', err);
       setError(err instanceof Error ? err.message : 'Connection failed');
     }
-  }, [brokerUrl, options]);
+  }, [brokerUrl, options?.username, options?.password, options?.clientId]);
 
   const disconnect = useCallback(() => {
     if (client) {

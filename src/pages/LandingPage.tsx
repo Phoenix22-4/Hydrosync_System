@@ -25,6 +25,7 @@ import { useAuth } from '../App';
 import { cn } from '../lib/utils';
 import FloatingChatBot from '../components/FloatingChatBot';
 import SystemArchitectureGraph from '../components/SystemArchitectureGraph';
+import { isMobileBrowser, isNativeApp } from '../lib/platform';
 
 export default function LandingPage() {
   const { user } = useAuth();
@@ -61,11 +62,12 @@ export default function LandingPage() {
   };
 
   const handleLogin = () => {
-    const isNativeApp = (window as any).Capacitor !== undefined ||
-                        (window as any).Android !== undefined ||
-                        !/^https?:\/\//.test(document.URL);
+    if (isNativeApp()) {
+      navigate('/login');
+      return;
+    }
 
-    if (isNativeApp) {
+    if (!isMobileBrowser()) {
       navigate('/login');
       return;
     }

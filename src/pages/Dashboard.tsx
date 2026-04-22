@@ -39,6 +39,7 @@ export default function Dashboard() {
   const [unreadAlerts, setUnreadAlerts] = useState(0);
   const [isOffline, setIsOffline]       = useState(false);
   const [isInternetOffline, setIsInternetOffline] = useState(!navigator.onLine);
+  const [fallbackBroker, setFallbackBroker] = useState<string | null>(null);
 
   useEffect(() => {
     const handleOnline = () => setIsInternetOffline(false);
@@ -54,13 +55,14 @@ export default function Dashboard() {
   }, []);
 
   const activeDevice = devices[activeDeviceIdx] ?? devices[0];
+  const resolvedBroker = activeDevice?.mqtt_broker || fallbackBroker;
 
   // ── MQTT Connection ──────────────────────────────────
   const { isConnected: mqttConnected, subscribe, publish: mqttPublish } = useMQTT(
-    activeDevice?.mqtt_broker ? (
-      activeDevice.mqtt_broker.startsWith('ws://') || activeDevice.mqtt_broker.startsWith('wss://')
-        ? activeDevice.mqtt_broker
-        : `wss://${activeDevice.mqtt_broker}:8884/mqtt`
+    resolvedBroker ? (
+      resolvedBroker.startsWith('ws://') || resolvedBroker.startsWith('wss://')
+        ? resolvedBroker
+        : `wss://${resolvedBroker}:8884/mqtt`
     ) : undefined,
     {
       username: activeDevice?.mqtt_username,
@@ -141,6 +143,18 @@ export default function Dashboard() {
       }
     });
   }, [user, activeDeviceIdx]);
+
+  useEffect(() => {
+    const q = query(collection(db, 'mqtt_hosts'), where('status', '==', 'active'), limit(1));
+    return onSnapshot(q, (snapshot) => {
+      if (!snapshot.empty) {
+        const firstHost = snapshot.docs[0].data() as { url?: string };
+        setFallbackBroker(firstHost.url?.trim() || null);
+      } else {
+        setFallbackBroker(null);
+      }
+    });
+  }, []);
 
   // ── MQTT Subscription for Live Data ──────────────────
   useEffect(() => {
@@ -313,10 +327,10 @@ export default function Dashboard() {
         // Use the persistent MQTT connection
         const commandTopic = `devices/${activeDevice.id}/commands`;
         mqttPublish(commandTopic, cmd);
-      } else if (activeDevice.mqtt_broker) {
+      } else if (resolvedBroker) {
         // Fallback: create temporary connection
         try {
-          let brokerUrl = activeDevice.mqtt_broker;
+          let brokerUrl = resolvedBroker;
           if (!brokerUrl.startsWith('ws://') && !brokerUrl.startsWith('wss://')) {
             brokerUrl = `wss://${brokerUrl}:8884/mqtt`;
           }
@@ -340,7 +354,7 @@ export default function Dashboard() {
     } catch (err) {
       console.error('sendCommand error:', err);
     }
-  }, [activeDevice, user, telemetry, mqttConnected, mqttPublish]);
+  }, [activeDevice, user, telemetry, mqttConnected, mqttPublish, resolvedBroker]);
 
   // ── Loading ───────────────────────────────────────────
   if (loading) {

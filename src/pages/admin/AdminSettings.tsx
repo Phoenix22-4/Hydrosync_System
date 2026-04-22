@@ -264,7 +264,7 @@ export default function AdminSettings() {
   return (
     <div className="flex min-h-screen bg-[#0a0f1e]">
       {/* Sidebar */}
-      <aside className="w-64 bg-[#111827] border-r border-white/5 flex flex-col sticky top-0 h-screen shrink-0">
+      <aside className="hidden lg:flex w-64 bg-[#111827] border-r border-white/5 flex-col sticky top-0 h-screen shrink-0">
         <div className="p-6 border-b border-white/5 flex items-center gap-3">
           <div className="w-9 h-9 bg-gradient-to-br from-blue-600 to-cyan-400 rounded-lg flex items-center justify-center shadow-lg shadow-cyan-500/20">
             <Settings className="w-5 h-5 text-white" />
@@ -278,6 +278,10 @@ export default function AdminSettings() {
           <Link to="/admin" className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium text-slate-500 hover:bg-white/5 hover:text-slate-200">Dashboard</Link>
           <Link to="/admin/devices" className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium text-slate-500 hover:bg-white/5 hover:text-slate-200">Device Registration</Link>
           <Link to="/admin/users" className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium text-slate-500 hover:bg-white/5 hover:text-slate-200">Users & Devices</Link>
+          <Link to="/admin/charts" className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium text-slate-500 hover:bg-white/5 hover:text-slate-200">Charts & Data</Link>
+          <Link to="/admin/log" className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium text-slate-500 hover:bg-white/5 hover:text-slate-200">Activity Log</Link>
+          <Link to="/admin/alerts" className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium text-slate-500 hover:bg-white/5 hover:text-slate-200">Fleet Alerts</Link>
+          <Link to="/admin/docs" className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium text-slate-500 hover:bg-white/5 hover:text-slate-200">Documentation</Link>
           <Link to="/admin/settings" className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium bg-cyan-500/10 text-cyan-400">Settings</Link>
         </nav>
         <div className="p-4 border-t border-white/5">
@@ -290,7 +294,7 @@ export default function AdminSettings() {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col h-screen overflow-y-auto">
-        <header className="h-16 bg-[#111827] border-b border-white/5 px-8 flex items-center justify-between sticky top-0 z-20 shrink-0">
+        <header className="h-16 bg-[#111827] border-b border-white/5 px-4 md:px-8 flex items-center justify-between sticky top-0 z-20 shrink-0">
           <div className="flex items-center gap-4">
             <button 
               onClick={() => navigate('/admin')}
@@ -303,7 +307,7 @@ export default function AdminSettings() {
           </div>
         </header>
 
-        <div className="p-8 max-w-4xl mx-auto w-full space-y-6">
+        <div className="p-4 md:p-8 max-w-4xl mx-auto w-full space-y-6">
           {/* Settings Navigation */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             {settingsSections.map(section => (
@@ -445,15 +449,15 @@ export default function AdminSettings() {
                   </h3>
                 </div>
                 <div className="p-6 space-y-4">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col lg:flex-row lg:items-center gap-3 lg:justify-between">
                     <p className="text-sm text-slate-400">Configure HiveMQ broker URLs for device communication</p>
-                    <div className="flex gap-2">
+                    <div className="flex flex-col sm:flex-row gap-2">
                       <input
                         type="url"
                         value={newHostUrl}
                         onChange={(e) => setNewHostUrl(e.target.value)}
                         placeholder="mqtt://broker.hivemq.com"
-                        className="bg-[#1a2234] border border-white/5 rounded-lg px-3 py-2 text-white text-sm w-64"
+                        className="bg-[#1a2234] border border-white/5 rounded-lg px-3 py-2 text-white text-sm w-full sm:w-64"
                       />
                       <button 
                         onClick={addMqttHost}

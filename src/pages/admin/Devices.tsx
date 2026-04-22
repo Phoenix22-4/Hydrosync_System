@@ -109,7 +109,7 @@ export default function AdminDevices() {
   return (
     <div className="flex min-h-screen bg-[#0a0f1e]">
       {/* Sidebar (Simplified for brevity, in real app use a shared component) */}
-      <aside className="w-64 bg-[#111827] border-r border-white/5 flex flex-col sticky top-0 h-screen shrink-0">
+      <aside className="hidden lg:flex w-64 bg-[#111827] border-r border-white/5 flex-col sticky top-0 h-screen shrink-0">
         <div className="p-6 border-b border-white/5 flex items-center gap-3">
           <div className="w-9 h-9 bg-gradient-to-br from-blue-600 to-cyan-400 rounded-lg flex items-center justify-center shadow-lg shadow-cyan-500/20">
             <Smartphone className="w-5 h-5 text-white" />
@@ -128,7 +128,7 @@ export default function AdminDevices() {
       </aside>
 
       <main className="flex-1 flex flex-col">
-        <header className="h-16 bg-[#111827] border-b border-white/5 px-8 flex items-center justify-between sticky top-0 z-20">
+        <header className="h-16 bg-[#111827] border-b border-white/5 px-4 md:px-8 flex items-center justify-between sticky top-0 z-20">
           <div className="flex items-center gap-4">
             <button 
               onClick={() => navigate('/admin')}
@@ -142,7 +142,7 @@ export default function AdminDevices() {
         </header>
 
         <PullToRefresh onRefresh={handleRefresh}>
-          <div className="p-8 space-y-6">
+          <div className="p-4 md:p-8 space-y-6">
             <div className="bg-[#111827] rounded-2xl border border-white/5 overflow-hidden shadow-sm">
               <div className="p-6 border-b border-white/5">
                 <h3 className="text-sm font-bold text-white">Device Registry</h3>
@@ -193,7 +193,9 @@ export default function AdminDevices() {
                       <tr><td colSpan={7} className="p-12 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto text-cyan-500" /></td></tr>
                     ) : filteredDevices.length > 0 ? filteredDevices.map((d) => {
                       const tel = telemetryMap[d.id];
-                      const offline = tel ? isDeviceOffline(tel) : true;
+                      const lastSeenSource = tel?.recorded_at || d.last_seen || null;
+                      const statusTelemetry = lastSeenSource ? ({ recorded_at: lastSeenSource } as Telemetry) : null;
+                      const offline = isDeviceOffline(statusTelemetry);
                       
                       return (
                         <tr key={d.id} className="hover:bg-white/[0.02] transition-colors group">
@@ -238,7 +240,7 @@ export default function AdminDevices() {
                                 </span>
                               </div>
                               <span className="text-[10px] text-slate-500">
-                                {getLastSeenString(tel)}
+                                {getLastSeenString(statusTelemetry)}
                               </span>
                             </div>
                           </td>

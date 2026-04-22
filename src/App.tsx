@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { AlertTriangle, ShieldCheck, Loader2, CheckCircle2 } from 'lucide-react';
 import { useNotifications } from './hooks/useNotifications';
 import { Capacitor } from '@capacitor/core';
+import { shouldForceNativeUserFlow } from './lib/platform';
 
 // Lazy Load Pages for Security & Performance (F12 Console Protection)
 const LandingPage = lazy(() => import('./pages/LandingPage'));
@@ -155,7 +156,7 @@ export default function App() {
                 <Route path="/" element={Capacitor.isNativePlatform() ? <Login /> : <LandingPage />} />
                 
                 {/* Auth Routes */}
-                <Route path="/login" element={<Login />} />
+                <Route path="/login" element={<UserWebGuard><Login /></UserWebGuard>} />
                 <Route path="/create-account" element={<CreateAccount />} />
                 <Route path="/confirm-token" element={<ConfirmToken />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -287,6 +288,10 @@ export default function App() {
 function ProtectedRoute({ loading, user, children }: { loading: boolean; user: User | null; children: ReactNode }) {
   const { profile } = useAuth();
   const location = useLocation();
+  if (shouldForceNativeUserFlow()) {
+    return <Navigate to="/" replace />;
+  }
+
   
   // Show loading while checking auth state
   if (loading) return <LoadingScreen />;
@@ -302,6 +307,14 @@ function ProtectedRoute({ loading, user, children }: { loading: boolean; user: U
   }
   
   // Allow pending users to access - they'll see verification/token banners
+  return <>{children}</>;
+}
+
+function UserWebGuard({ children }: { children: ReactNode }) {
+  if (shouldForceNativeUserFlow()) {
+    return <Navigate to="/" replace />;
+  }
+
   return <>{children}</>;
 }
 
