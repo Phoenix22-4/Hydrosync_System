@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { doc, getDoc, setDoc, updateDoc, collection, getDocs, deleteDoc, addDoc } from 'firebase/firestore';
+import mqtt from 'mqtt';
 
 export default function AdminSettings() {
   const { user, profile } = useAuth();
@@ -21,6 +22,8 @@ export default function AdminSettings() {
   const [newHostDeviceId, setNewHostDeviceId] = useState('');
   const [editingHost, setEditingHost] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ url: '', deviceId: '' });
+  const [testingHostId, setTestingHostId] = useState<string | null>(null);
+  const [hostTestResult, setHostTestResult] = useState<Record<string, { ok: boolean; message: string }>>({});
   const [notificationSettings, setNotificationSettings] = useState({
     emailAlerts: true,
     pushNotifications: true,
@@ -76,6 +79,62 @@ export default function AdminSettings() {
     } catch (error) {
       console.error('Error adding MQTT host:', error);
     }
+  };
+
+  const toWsBrokerUrl = (rawUrl: string) => {
+    const trimmed = rawUrl.trim();
+    if (trimmed.startsWith('ws://') || trimmed.startsWith('wss://')) return trimmed;
+    return `wss://${trimmed}:8884/mqtt`;
+  };
+
+  const testMqttHostConnection = async (hostUrl: string, key: string) => {
+    const normalizedHost = hostUrl.trim();
+    if (!normalizedHost) return;
+
+    setTestingHostId(key);
+    setHostTestResult((prev) => ({ ...prev, [key]: { ok: false, message: 'Testing...' } }));
+
+    const startedAt = Date.now();
+    const wsUrl = toWsBrokerUrl(normalizedHost);
+
+    await new Promise<void>((resolve) => {
+      let settled = false;
+      const client = mqtt.connect(wsUrl, {
+        connectTimeout: 8000,
+        reconnectPeriod: 0,
+        clean: true,
+        clientId: `hydrosync_admin_test_${Math.random().toString(16).slice(2, 8)}`,
+      });
+
+      const finish = (ok: boolean, message: string) => {
+        if (settled) return;
+        settled = true;
+        setHostTestResult((prev) => ({ ...prev, [key]: { ok, message } }));
+        try {
+          client.end(true);
+        } catch {
+          // No-op; best-effort disconnect.
+        }
+        resolve();
+      };
+
+      const timeout = setTimeout(() => {
+        finish(false, 'Connection timeout');
+      }, 9000);
+
+      client.on('connect', () => {
+        clearTimeout(timeout);
+        const latency = Date.now() - startedAt;
+        finish(true, `Connected (${latency} ms)`);
+      });
+
+      client.on('error', (err) => {
+        clearTimeout(timeout);
+        finish(false, err.message || 'Connection failed');
+      });
+    });
+
+    setTestingHostId(null);
   };
 
   const updateMqttHost = async (id: string) => {
@@ -480,8 +539,21 @@ export default function AdminSettings() {
                         <Plus className="w-4 h-4" />
                         Add Host
                       </button>
+                      <button
+                        onClick={() => testMqttHostConnection(newHostUrl, '__new__')}
+                        disabled={!newHostUrl.trim() || testingHostId === '__new__'}
+                        className="px-4 py-2 bg-white/5 hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed text-slate-300 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors"
+                      >
+                        {testingHostId === '__new__' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Globe className="w-4 h-4" />}
+                        Test Host
+                      </button>
                     </div>
                   </div>
+                  {hostTestResult.__new__ && (
+                    <p className={cn("text-xs", hostTestResult.__new__.ok ? "text-green-400" : "text-red-400")}>
+                      {hostTestResult.__new__.message}
+                    </p>
+                  )}
                   
                   <div className="space-y-3">
                     {mqttHosts.map(host => (
@@ -560,6 +632,13 @@ export default function AdminSettings() {
                                 {host.status === 'active' ? 'Deactivate' : 'Activate'}
                               </button>
                               <button
+                                onClick={() => testMqttHostConnection(host.url, host.id)}
+                                disabled={testingHostId === host.id}
+                                className="px-3 py-1 rounded-lg text-xs font-bold bg-white/5 hover:bg-white/10 text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {testingHostId === host.id ? 'Testing...' : 'Test'}
+                              </button>
+                              <button
                                 onClick={() => deleteMqttHost(host.id)}
                                 className="p-2 hover:bg-red-500/10 rounded-lg text-slate-400 hover:text-red-400 transition-colors"
                               >
@@ -568,6 +647,11 @@ export default function AdminSettings() {
                             </div>
                           )}
                         </div>
+                        {hostTestResult[host.id] && (
+                          <p className={cn("text-xs mt-2", hostTestResult[host.id].ok ? "text-green-400" : "text-red-400")}>
+                            {hostTestResult[host.id].message}
+                          </p>
+                        )}
                       </div>
                     ))}
                     
