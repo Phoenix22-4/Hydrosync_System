@@ -261,7 +261,7 @@ export default function LandingPage() {
               className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-2"
             >
               <LogIn className="w-4 h-4" />
-              <span>Open App</span>
+              <span>Login</span>
             </button>
           </div>
 
