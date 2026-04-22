@@ -11,29 +11,13 @@ export default defineConfig(({mode}) => {
       react(), 
       tailwindcss(),
       VitePWA({
+        // Admin is the only PWA. We register the service worker at runtime
+        // only for /setup_Adminhydro (and /admin routes) inside index.html.
+        injectRegister: null,
         registerType: 'autoUpdate',
         includeAssets: ['icon.png'],
-        manifest: {
-          // Default (non-admin) PWA identity. Admin gets its own manifest at runtime.
-          name: 'HydroSync',
-          short_name: 'HydroSync',
-          description: 'Smart Water Management System',
-          theme_color: '#0f172a',
-          background_color: '#0f172a',
-          display: 'standalone',
-          icons: [
-            {
-              src: 'icon.png',
-              sizes: '192x192',
-              type: 'image/png'
-            },
-            {
-              src: 'icon.png',
-              sizes: '512x512',
-              type: 'image/png'
-            }
-          ]
-        }
+        // Disable generated/injected manifest: we ship a static admin manifest in /public.
+        manifest: false
       })
     ],
     resolve: {
