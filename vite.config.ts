@@ -14,7 +14,8 @@ export default defineConfig(({mode}) => {
         registerType: 'autoUpdate',
         includeAssets: ['icon.png'],
         manifest: {
-          name: 'HydroSync Admin',
+          // Default (non-admin) PWA identity. Admin gets its own manifest at runtime.
+          name: 'HydroSync',
           short_name: 'HydroSync',
           description: 'Smart Water Management System',
           theme_color: '#0f172a',

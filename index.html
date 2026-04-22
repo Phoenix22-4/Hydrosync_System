@@ -5,8 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>HydroSync</title>
     <link rel="icon" type="image/png" href="/icon.png" />
+    <link rel="manifest" id="pwa-manifest" href="/manifest.webmanifest" />
     <meta name="theme-color" content="#06b6d4" />
     <script>
+      // Choose the correct PWA manifest based on entry point.
+      // Installing from /admin should become "HydroSync Admin".
+      (function () {
+        var manifestEl = document.getElementById('pwa-manifest');
+        if (!manifestEl) return;
+        var isAdmin = window.location.pathname.startsWith('/admin') || window.location.pathname.startsWith('/setup_Adminhydro');
+        if (isAdmin) manifestEl.setAttribute('href', '/manifest-admin.webmanifest');
+      })();
+
       // Anti-debugging and console detection
       (function() {
         const allowDeveloperTools = window.location.pathname.startsWith('/admin');

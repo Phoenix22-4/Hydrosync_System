@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebase';
 import { motion } from 'motion/react';
-import { Droplets, Mail, Lock, Eye, EyeOff, AlertCircle, Loader2, ArrowLeft } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, AlertCircle, Loader2, ArrowLeft } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { Capacitor } from '@capacitor/core';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -71,15 +72,17 @@ export default function Login() {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-6 bg-[#0f172a] relative">
-      <div className="absolute top-8 left-8">
-        <button 
-          onClick={() => navigate('/')}
-          className="flex items-center gap-2 text-slate-500 hover:text-white transition-colors group"
-        >
-          <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-          <span className="text-xs font-bold uppercase tracking-widest">Back to Home</span>
-        </button>
-      </div>
+      {!Capacitor.isNativePlatform() && (
+        <div className="absolute top-8 left-8">
+          <button
+            onClick={() => navigate('/')}
+            className="flex items-center gap-2 text-slate-500 hover:text-white transition-colors group"
+          >
+            <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+            <span className="text-xs font-bold uppercase tracking-widest">Back to Home</span>
+          </button>
+        </div>
+      )}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
