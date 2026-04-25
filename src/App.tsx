@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext, ReactNode, Suspense, lazy } from 'react';
+import React, { useState, useEffect, createContext, useContext, ReactNode, Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { onAuthStateChanged, User, sendEmailVerification, reload } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
@@ -149,9 +149,10 @@ export default function App() {
               </button>
             </div>
           )}
-          <Suspense fallback={<LoadingScreen />}>
-            <AnimatePresence mode="wait">
-              <Routes>
+          <AppErrorBoundary>
+            <Suspense fallback={<LoadingScreen />}>
+              <AnimatePresence mode="wait">
+                <Routes>
                 {/* Public Website or App Login */}
                 <Route path="/" element={Capacitor.isNativePlatform() ? <Login /> : <LandingPage />} />
                 
@@ -276,13 +277,53 @@ export default function App() {
 
                 {/* Fallback */}
                 <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
-            </AnimatePresence>
-          </Suspense>
+                </Routes>
+              </AnimatePresence>
+            </Suspense>
+          </AppErrorBoundary>
         </div>
       </Router>
     </AuthContext.Provider>
   );
+}
+
+class AppErrorBoundary extends React.Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error) {
+    console.error('UI crashed:', error);
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="min-h-screen bg-[#0f172a] text-slate-200 flex items-center justify-center p-6">
+          <div className="w-full max-w-lg bg-[#111827] border border-red-500/30 rounded-2xl p-6">
+            <p className="text-xs font-bold text-red-400 uppercase tracking-widest">UI Error</p>
+            <h2 className="mt-2 text-xl font-black text-white">Something crashed on this page</h2>
+            <p className="mt-3 text-sm text-slate-400">
+              Open DevTools (F12) to see the exact error. This screen prevents the app from going blank.
+            </p>
+            <pre className="mt-4 text-xs text-red-300 whitespace-pre-wrap break-words bg-black/30 p-3 rounded-xl border border-white/10">
+              {this.state.error.message}
+            </pre>
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-5 w-full py-3 bg-red-500 hover:bg-red-400 text-white font-bold rounded-xl transition-colors"
+            >
+              Reload
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
 }
 
 function ProtectedRoute({ loading, user, children }: { loading: boolean; user: User | null; children: ReactNode }) {

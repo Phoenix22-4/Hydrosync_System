@@ -9,7 +9,7 @@ import {
   Trash2, Download, Moon, Volume2, Lock, Plus, X, Save, Edit
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { doc, getDoc, setDoc, updateDoc, collection, getDocs, deleteDoc, addDoc, writeBatch } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, collection, getDocs, deleteDoc, addDoc, writeBatch, query, where, limit } from 'firebase/firestore';
 import mqtt from 'mqtt';
 
 export default function AdminSettings() {
@@ -156,6 +156,70 @@ export default function AdminSettings() {
 
       client.on('error', (err) => {
         clearTimeout(timeout);
+        finish(false, err.message || 'Connection failed');
+      });
+    });
+
+    setTestingHostId(null);
+  };
+
+  const testStoredHostConnection = async (hostId: string, hostUrl: string, deviceId?: string | null) => {
+    let username: string | undefined;
+    let password: string | undefined;
+
+    if (deviceId?.trim()) {
+      try {
+        const deviceQ = query(collection(db, 'devices'), where('device_id', '==', deviceId.trim()), limit(1));
+        const snap = await getDocs(deviceQ);
+        if (!snap.empty) {
+          const deviceData = snap.docs[0].data() as { mqtt_username?: string; mqtt_password?: string };
+          username = deviceData.mqtt_username;
+          password = deviceData.mqtt_password;
+        }
+      } catch (error) {
+        console.error('Error fetching device MQTT credentials for test:', error);
+      }
+    }
+
+    const normalizedHost = hostUrl.trim();
+    if (!normalizedHost) return;
+
+    setTestingHostId(hostId);
+    setHostTestResult((prev) => ({ ...prev, [hostId]: { ok: false, message: 'Testing...' } }));
+
+    const startedAt = Date.now();
+    const wsUrl = toWsBrokerUrl(normalizedHost);
+
+    await new Promise<void>((resolve) => {
+      let settled = false;
+      const client = mqtt.connect(wsUrl, {
+        username: username?.trim() || undefined,
+        password: password?.trim() || undefined,
+        connectTimeout: 8000,
+        reconnectPeriod: 0,
+        clean: true,
+        clientId: `hydrosync_admin_test_${Math.random().toString(16).slice(2, 8)}`,
+      });
+
+      const finish = (ok: boolean, message: string) => {
+        if (settled) return;
+        settled = true;
+        setHostTestResult((prev) => ({ ...prev, [hostId]: { ok, message } }));
+        try { client.end(true); } catch {}
+        resolve();
+      };
+
+      const timeout = setTimeout(() => finish(false, 'Connection timeout'), 9000);
+
+      client.on('connect', () => {
+        clearTimeout(timeout);
+        const latency = Date.now() - startedAt;
+        finish(true, `Connected (${latency} ms)`);
+      });
+
+      client.on('error', (err) => {
+        clearTimeout(timeout);
+        // HiveMQ Cloud commonly returns "Not authorized" when creds missing/wrong.
         finish(false, err.message || 'Connection failed');
       });
     });
@@ -661,7 +725,7 @@ export default function AdminSettings() {
                                 {host.status === 'active' ? 'Deactivate' : 'Activate'}
                               </button>
                               <button
-                                onClick={() => testMqttHostConnection(host.url, host.id)}
+                                onClick={() => testStoredHostConnection(host.id, host.url, host.device_id)}
                                 disabled={testingHostId === host.id}
                                 className="px-3 py-1 rounded-lg text-xs font-bold bg-white/5 hover:bg-white/10 text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed"
                               >
