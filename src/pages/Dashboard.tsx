@@ -81,7 +81,7 @@ export default function Dashboard() {
 
           // Security: Only accept messages for owned devices
           const isAuthorizedTopic = devices.some(device =>
-            topic.startsWith(`devices/${device.id}/`) && device.assigned_to_user === user?.uid
+            topic.startsWith(`devices/${device.device_id}/`) && device.assigned_to_user === user?.uid
           );
 
           if (!isAuthorizedTopic) {
@@ -90,10 +90,10 @@ export default function Dashboard() {
           }
 
           // Find which device this message is for
-          const targetDevice = devices.find(device => topic.startsWith(`devices/${device.id}/`));
+          const targetDevice = devices.find(device => topic.startsWith(`devices/${device.device_id}/`));
           if (!targetDevice) return;
 
-          if (topic === `devices/${targetDevice.id}/data`) {
+          if (topic === `devices/${targetDevice.device_id}/data`) {
             // Update telemetry with live data
             setTelemetry({
               recorded_at: serverTimestamp() as any,
@@ -115,7 +115,7 @@ export default function Dashboard() {
                 error_state: payload.system_status,
               });
             }
-          } else if (topic === `devices/${activeDevice?.id}/alerts`) {
+          } else if (activeDevice?.device_id && topic === `devices/${activeDevice.device_id}/alerts`) {
             // Handle alerts
             console.log('Alert received:', payload);
             // Could add alert handling here

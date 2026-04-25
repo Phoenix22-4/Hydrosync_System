@@ -24,6 +24,32 @@ allprojects {
     }
 }
 
+// Force Java 17 across all Android subprojects (including :capacitor-android).
+// Some Capacitor-generated Gradle files may request Java 21, which fails on JDK 17.
+subprojects { subproj ->
+    afterEvaluate {
+        // Android Gradle Plugin projects expose an 'android' extension.
+        if (subproj.extensions.findByName("android") != null) {
+            try {
+                subproj.android {
+                    compileOptions {
+                        sourceCompatibility JavaVersion.VERSION_17
+                        targetCompatibility JavaVersion.VERSION_17
+                    }
+                }
+            } catch (Throwable ignored) {
+                // Best-effort: not all subprojects support compileOptions the same way.
+            }
+        }
+
+        // Also enforce Java 17 source/target for any JavaCompile tasks.
+        subproj.tasks.withType(JavaCompile).configureEach { t ->
+            t.sourceCompatibility = "17"
+            t.targetCompatibility = "17"
+        }
+    }
+}
+
 task clean(type: Delete) {
     delete rootProject.buildDir
 }

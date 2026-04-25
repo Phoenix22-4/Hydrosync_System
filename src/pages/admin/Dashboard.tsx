@@ -74,22 +74,13 @@ export default function AdminDashboard() {
       setRecentAlerts(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Alert)));
     });
 
-    // Fetch bridge status (simulated via a heartbeat document)
+    // Bridge status is driven by the global admin bridge (mounted in App.tsx).
+    // We derive a user-friendly status from the heartbeat document.
     const unsubBridge = onSnapshot(doc(db, 'system', 'bridge_status'), (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        const lastSeen = data.last_seen?.toDate();
-        const now = new Date();
-        // If last seen was more than 30 seconds ago, consider it offline
-        if (lastSeen && (now.getTime() - lastSeen.getTime()) < 30000) {
-          setBridgeStatus('online');
-        } else {
-          setBridgeStatus('offline');
-        }
-      } else {
-        setBridgeStatus('offline');
-      }
-    });
+      const lastSeen = snap.data()?.last_seen?.toMillis?.() ? snap.data().last_seen.toMillis() : 0;
+      const isOnline = lastSeen && Date.now() - lastSeen < 45000;
+      setBridgeStatus(isOnline ? 'online' : 'offline');
+    }, () => setBridgeStatus('offline'));
 
     return () => {
       unsubDevices();
@@ -98,7 +89,7 @@ export default function AdminDashboard() {
       unsubRecentAlerts();
       unsubBridge();
     };
-  }, []);
+  }, [user]);
 
   return (
     <div className="flex min-h-screen bg-[#0a0f1e]">

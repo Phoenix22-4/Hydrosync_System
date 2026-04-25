@@ -8,11 +8,11 @@
     <meta name="theme-color" content="#06b6d4" />
     <script>
       // Admin is the ONLY PWA.
-      // - Install entry: /setup_Adminhydro
+      // - Install entry: /setup_adminhydro
       // - Admin routes: /admin/*
       (function () {
         var path = window.location.pathname || '/';
-        var isAdmin = path.startsWith('/setup_Adminhydro') || path.startsWith('/admin');
+        var isAdmin = path.startsWith('/setup_adminhydro') || path.startsWith('/admin');
         if (!isAdmin) return;
 
         // Add admin manifest
@@ -26,79 +26,6 @@
         swScript.setAttribute('type', 'module');
         swScript.setAttribute('src', '/registerSW.js');
         document.head.appendChild(swScript);
-      })();
-
-      // Anti-debugging and console detection
-      (function() {
-        const allowDeveloperTools =
-          window.location.pathname.startsWith('/admin') ||
-          window.location.pathname.startsWith('/setup_Adminhydro');
-
-        if (!allowDeveloperTools) {
-          // Disable right-click context menu
-          document.addEventListener('contextmenu', function(e) {
-            e.preventDefault();
-            return false;
-          }, true);
-          
-          // Disable keyboard shortcuts for DevTools
-          document.addEventListener('keydown', function(e) {
-            // F12
-            if (e.key === 'F12') {
-              e.preventDefault();
-              window.location.href = '/HydroSync-App.apk';
-              return false;
-            }
-            // Ctrl+Shift+I (Windows) or Cmd+Option+I (Mac)
-            if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'I') {
-              e.preventDefault();
-              window.location.href = '/HydroSync-App.apk';
-              return false;
-            }
-            // Ctrl+Shift+J (Console)
-            if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'J') {
-              e.preventDefault();
-              window.location.href = '/HydroSync-App.apk';
-              return false;
-            }
-            // Ctrl+Shift+C (Inspector)
-            if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'C') {
-              e.preventDefault();
-              window.location.href = '/HydroSync-App.apk';
-              return false;
-            }
-            // Ctrl+U (View source)
-            if ((e.ctrlKey || e.metaKey) && e.key === 'u') {
-              e.preventDefault();
-              window.location.href = '/HydroSync-App.apk';
-              return false;
-            }
-          }, true);
-          
-          // Detect DevTools opening via console size
-          let devToolsOpen = false;
-          const threshold = 160;
-          setInterval(function() {
-            const widthThreshold = window.outerWidth - window.innerWidth > threshold;
-            const heightThreshold = window.outerHeight - window.innerHeight > threshold;
-            if (widthThreshold || heightThreshold) {
-              if (!devToolsOpen) {
-                devToolsOpen = true;
-                window.location.href = '/HydroSync-App.apk';
-              }
-            } else {
-              devToolsOpen = false;
-            }
-          }, 1000);
-          
-          // Override console methods
-          const noop = function() {};
-          console.log = noop;
-          console.warn = noop;
-          console.error = noop;
-          console.info = noop;
-          console.debug = noop;
-        }
       })();
     </script>
   </head>

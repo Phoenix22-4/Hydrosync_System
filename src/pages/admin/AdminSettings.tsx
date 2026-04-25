@@ -17,11 +17,13 @@ export default function AdminSettings() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [activeSection, setActiveSection] = useState<'account' | 'notifications' | 'system' | 'mqtt' | 'data' | null>('account');
-  const [mqttHosts, setMqttHosts] = useState<Array<{id: string, url: string, status: 'active' | 'inactive', device_id?: string | null}>>([]);
+  const [mqttHosts, setMqttHosts] = useState<Array<{id: string, url: string, status: 'active' | 'inactive', device_id?: string | null, username?: string | null, password?: string | null}>>([]);
   const [newHostUrl, setNewHostUrl] = useState('');
   const [newHostDeviceId, setNewHostDeviceId] = useState('');
+  const [newHostUsername, setNewHostUsername] = useState('');
+  const [newHostPassword, setNewHostPassword] = useState('');
   const [editingHost, setEditingHost] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ url: '', deviceId: '' });
+  const [editForm, setEditForm] = useState({ url: '', deviceId: '', username: '', password: '' });
   const [testingHostId, setTestingHostId] = useState<string | null>(null);
   const [hostTestResult, setHostTestResult] = useState<Record<string, { ok: boolean; message: string }>>({});
   const [notificationSettings, setNotificationSettings] = useState({
@@ -58,7 +60,7 @@ export default function AdminSettings() {
       const hosts = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
-      })) as Array<{id: string, url: string, status: 'active' | 'inactive', device_id?: string | null}>;
+      })) as Array<{id: string, url: string, status: 'active' | 'inactive', device_id?: string | null, username?: string | null, password?: string | null}>;
       setMqttHosts(hosts);
     } catch (error) {
       console.error('Error loading MQTT hosts:', error);
@@ -73,9 +75,13 @@ export default function AdminSettings() {
         url: normalized,
         status: 'active',
         device_id: newHostDeviceId.trim() || null,
+        username: newHostUsername.trim() || null,
+        password: newHostPassword.trim() || null,
       });
       setNewHostUrl('');
       setNewHostDeviceId('');
+      setNewHostUsername('');
+      setNewHostPassword('');
       loadMqttHosts();
     } catch (error) {
       console.error('Error adding MQTT host:', error);
@@ -126,6 +132,8 @@ export default function AdminSettings() {
     await new Promise<void>((resolve) => {
       let settled = false;
       const client = mqtt.connect(wsUrl, {
+        username: newHostUsername.trim() || undefined,
+        password: newHostPassword.trim() || undefined,
         connectTimeout: 8000,
         reconnectPeriod: 0,
         clean: true,
@@ -233,9 +241,11 @@ export default function AdminSettings() {
       await updateDoc(doc(db, 'mqtt_hosts', id), {
         url: normalizeBrokerInput(editForm.url),
         device_id: editForm.deviceId.trim() || null,
+        username: editForm.username.trim() || null,
+        password: editForm.password.trim() || null,
       });
       setEditingHost(null);
-      setEditForm({ url: '', deviceId: '' });
+      setEditForm({ url: '', deviceId: '', username: '', password: '' });
       loadMqttHosts();
     } catch (error) {
       console.error('Error updating MQTT host:', error);
@@ -623,6 +633,20 @@ export default function AdminSettings() {
                           placeholder="Device ID (optional)"
                           className="bg-[#1a2234] border border-white/5 rounded-lg px-3 py-2 text-white text-sm w-full sm:w-52"
                         />
+                        <input
+                        type="text"
+                          value={newHostUsername}
+                          onChange={(e) => setNewHostUsername(e.target.value)}
+                          placeholder="MQTT Username"
+                          className="bg-[#1a2234] border border-white/5 rounded-lg px-3 py-2 text-white text-sm w-full sm:w-52"
+                        />
+                        <input
+                        type="password"
+                          value={newHostPassword}
+                          onChange={(e) => setNewHostPassword(e.target.value)}
+                          placeholder="MQTT Password"
+                          className="bg-[#1a2234] border border-white/5 rounded-lg px-3 py-2 text-white text-sm w-full sm:w-52"
+                        />
                       </div>
                       <button 
                         onClick={addMqttHost}
@@ -678,6 +702,20 @@ export default function AdminSettings() {
                                   className="bg-[#0f172a] border border-white/5 rounded-lg px-3 py-2 text-white text-sm w-40"
                                   placeholder="Device ID"
                                 />
+                                <input
+                                  type="text"
+                                  value={editForm.username}
+                                  onChange={(e) => setEditForm(prev => ({ ...prev, username: e.target.value }))}
+                                  className="bg-[#0f172a] border border-white/5 rounded-lg px-3 py-2 text-white text-sm w-40"
+                                  placeholder="MQTT Username"
+                                />
+                                <input
+                                  type="password"
+                                  value={editForm.password}
+                                  onChange={(e) => setEditForm(prev => ({ ...prev, password: e.target.value }))}
+                                  className="bg-[#0f172a] border border-white/5 rounded-lg px-3 py-2 text-white text-sm w-40"
+                                  placeholder="MQTT Password"
+                                />
                                 <button
                                   onClick={() => updateMqttHost(host.id)}
                                   className="px-3 py-2 bg-green-500/10 hover:bg-green-500/20 text-green-400 rounded-lg text-sm"
@@ -687,7 +725,7 @@ export default function AdminSettings() {
                                 <button
                                   onClick={() => {
                                     setEditingHost(null);
-                                    setEditForm({ url: '', deviceId: '' });
+                                    setEditForm({ url: '', deviceId: '', username: '', password: '' });
                                   }}
                                   className="px-3 py-2 bg-slate-500/10 hover:bg-slate-500/20 text-slate-400 rounded-lg text-sm"
                                 >
@@ -698,6 +736,7 @@ export default function AdminSettings() {
                               <div className="flex-1">
                                 <p className="text-sm font-bold text-white">{host.url}</p>
                                 <p className="text-xs text-slate-400">Device binding: {host.device_id || 'Global fallback'}</p>
+                                <p className="text-xs text-slate-400">Auth: {host.username ? 'Configured' : 'Missing'}</p>
                                 <p className="text-xs text-slate-500">{host.status === 'active' ? 'Active' : 'Inactive'}</p>
                               </div>
                             )}
@@ -707,7 +746,7 @@ export default function AdminSettings() {
                               <button
                                 onClick={() => {
                                   setEditingHost(host.id);
-                                  setEditForm({ url: host.url, deviceId: host.device_id || '' });
+                                  setEditForm({ url: host.url, deviceId: host.device_id || '', username: host.username || '', password: host.password || '' });
                                 }}
                                 className="p-2 hover:bg-white/5 rounded-lg text-slate-400 hover:text-white transition-colors"
                               >

@@ -9,6 +9,7 @@ import { AlertTriangle, ShieldCheck, Loader2, CheckCircle2 } from 'lucide-react'
 import { useNotifications } from './hooks/useNotifications';
 import { Capacitor } from '@capacitor/core';
 import { shouldForceNativeUserFlow } from './lib/platform';
+import { useAdminMqttAutoRegister } from './hooks/useAdminMqttAutoRegister';
 
 // Lazy Load Pages for Security & Performance (F12 Console Protection)
 const LandingPage = lazy(() => import('./pages/LandingPage'));
@@ -152,6 +153,7 @@ export default function App() {
           <AppErrorBoundary>
             <Suspense fallback={<LoadingScreen />}>
               <AnimatePresence mode="wait">
+                <AdminMqttBridge enabled={!!user && isAdmin} />
                 <Routes>
                 {/* Public Website or App Login */}
                 <Route path="/" element={Capacitor.isNativePlatform() ? <Login /> : <LandingPage />} />
@@ -285,6 +287,13 @@ export default function App() {
       </Router>
     </AuthContext.Provider>
   );
+}
+
+function AdminMqttBridge({ enabled }: { enabled: boolean }) {
+  // Keeps the MQTT→Firestore auto-registration running while any admin is logged in,
+  // regardless of which admin page they are currently viewing.
+  useAdminMqttAutoRegister(enabled);
+  return null;
 }
 
 class AppErrorBoundary extends React.Component<{ children: ReactNode }, { error: Error | null }> {
