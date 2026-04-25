@@ -171,18 +171,26 @@ export default function AdminSettings() {
     setTestingHostId(null);
   };
 
-  const testStoredHostConnection = async (hostId: string, hostUrl: string, deviceId?: string | null) => {
-    let username: string | undefined;
-    let password: string | undefined;
+  const testStoredHostConnection = async (
+    hostId: string,
+    hostUrl: string,
+    deviceId?: string | null,
+    hostUsername?: string | null,
+    hostPassword?: string | null
+  ) => {
+    // Prefer credentials stored on the host record (most common for HiveMQ Cloud),
+    // fallback to device-bound creds if the host is bound to a device.
+    let username: string | undefined = hostUsername?.trim() || undefined;
+    let password: string | undefined = hostPassword?.trim() || undefined;
 
-    if (deviceId?.trim()) {
+    if ((!username || !password) && deviceId?.trim()) {
       try {
         const deviceQ = query(collection(db, 'devices'), where('device_id', '==', deviceId.trim()), limit(1));
         const snap = await getDocs(deviceQ);
         if (!snap.empty) {
           const deviceData = snap.docs[0].data() as { mqtt_username?: string; mqtt_password?: string };
-          username = deviceData.mqtt_username;
-          password = deviceData.mqtt_password;
+          username = username || deviceData.mqtt_username?.trim() || undefined;
+          password = password || deviceData.mqtt_password?.trim() || undefined;
         }
       } catch (error) {
         console.error('Error fetching device MQTT credentials for test:', error);
@@ -764,7 +772,7 @@ export default function AdminSettings() {
                                 {host.status === 'active' ? 'Deactivate' : 'Activate'}
                               </button>
                               <button
-                                onClick={() => testStoredHostConnection(host.id, host.url, host.device_id)}
+                                onClick={() => testStoredHostConnection(host.id, host.url, host.device_id, host.username, host.password)}
                                 disabled={testingHostId === host.id}
                                 className="px-3 py-1 rounded-lg text-xs font-bold bg-white/5 hover:bg-white/10 text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed"
                               >

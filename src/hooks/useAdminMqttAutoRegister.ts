@@ -89,8 +89,11 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
         client.on('connect', async () => {
           setStatus('online');
           try {
-            // subscribe to ALL device data
-            client.subscribe('devices/+/data', { qos: 0 });
+            // Subscribe to telemetry topics (support both legacy + current firmware topics)
+            client.subscribe(
+              ['devices/+/data', 'devices/+/telemetry', 'hydrosync/data/+'],
+              { qos: 0 }
+            );
             // heartbeat doc for admin UI
             await setDoc(
               doc(db, 'system', 'bridge_status'),
@@ -108,9 +111,16 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
 
         client.on('message', async (topic, message) => {
           try {
-            // topic: devices/<DEVICE_ID>/data
-            const m = topic.match(/^devices\/([^/]+)\/data$/);
+            // Supported:
+            // - devices/<DEVICE_ID>/data
+            // - devices/<DEVICE_ID>/telemetry
+            // - hydrosync/data/<DEVICE_ID>
+            const m =
+              topic.match(/^devices\/([^/]+)\/data$/) ||
+              topic.match(/^devices\/([^/]+)\/telemetry$/) ||
+              topic.match(/^hydrosync\/data\/([^/]+)$/);
             if (!m) return;
+
             const deviceId = m[1].trim().toUpperCase();
             if (!deviceId) return;
 
