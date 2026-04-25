@@ -92,7 +92,14 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
             // Subscribe to telemetry topics (support both legacy + current firmware topics)
             client.subscribe(
               ['devices/+/data', 'devices/+/telemetry', 'hydrosync/data/+'],
-              { qos: 0 }
+              { qos: 0 },
+              (err, granted) => {
+                if (err) {
+                  console.error('Admin bridge subscribe failed:', err);
+                } else {
+                  console.log('Admin bridge subscribed:', granted);
+                }
+              }
             );
             // heartbeat doc for admin UI
             await setDoc(
