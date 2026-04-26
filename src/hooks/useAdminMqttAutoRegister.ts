@@ -12,6 +12,10 @@ type HostDoc = {
   password?: string | null;
 };
 
+const BRIDGE_SYSTEM_KEY =
+  (import.meta.env.VITE_BRIDGE_SYSTEM_KEY as string | undefined)?.trim() ||
+  'HYDROSYNC_BRIDGE_KEY_CHANGE_ME';
+
 function normalizeBrokerInput(input: string) {
   const raw = input.trim();
   if (!raw) return '';
@@ -124,6 +128,7 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
                   await setDoc(
                     doc(db, 'system', 'bridge_status'),
                     {
+                      system_key: BRIDGE_SYSTEM_KEY,
                       last_seen: serverTimestamp(),
                       source: 'admin-pwa',
                       status: 'subscribe_error',
@@ -140,6 +145,7 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
                   await setDoc(
                     doc(db, 'system', 'bridge_status'),
                     {
+                      system_key: BRIDGE_SYSTEM_KEY,
                       last_seen: serverTimestamp(),
                       source: 'admin-pwa',
                       status: 'subscribe_denied',
@@ -155,7 +161,7 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
             // heartbeat doc for admin UI
             await setDoc(
               doc(db, 'system', 'bridge_status'),
-              { last_seen: serverTimestamp(), source: 'admin-pwa', status: 'online' },
+              { system_key: BRIDGE_SYSTEM_KEY, last_seen: serverTimestamp(), source: 'admin-pwa', status: 'online' },
               { merge: true }
             );
           } catch (e) {
@@ -178,6 +184,7 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
             await setDoc(
               doc(db, 'system', 'bridge_status'),
               {
+                system_key: BRIDGE_SYSTEM_KEY,
                 last_seen: serverTimestamp(),
                 source: 'admin-pwa',
                 status: 'online',
@@ -207,6 +214,7 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
               deviceRef,
               {
                 device_id: deviceId,
+                system_key: BRIDGE_SYSTEM_KEY,
                 token,
                 status: (existing.exists() ? (existing.data() as any)?.status : 'unassigned') || 'unassigned',
                 registered_at: firstRegisteredAt || serverTimestamp(),
@@ -222,6 +230,7 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
             await setDoc(
               doc(db, 'system', 'bridge_status'),
               {
+                system_key: BRIDGE_SYSTEM_KEY,
                 last_seen: serverTimestamp(),
                 source: 'admin-pwa',
                 status: 'online',
@@ -233,6 +242,7 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
 
             // Store telemetry snapshot
             await addDoc(collection(db, 'devices', deviceId, 'telemetry'), {
+              system_key: BRIDGE_SYSTEM_KEY,
               recorded_at: serverTimestamp(),
               overhead_level: payload?.overhead_level ?? null,
               underground_level: payload?.underground_level ?? null,
@@ -246,6 +256,7 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
             await setDoc(
               deviceRef,
               {
+              system_key: BRIDGE_SYSTEM_KEY,
               overhead_level: payload?.overhead_level ?? null,
               underground_level: payload?.underground_level ?? null,
               pump_status: payload?.pump_status ?? null,
@@ -259,6 +270,7 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
             await setDoc(
               doc(db, 'system', 'bridge_status'),
               {
+                system_key: BRIDGE_SYSTEM_KEY,
                 last_seen: serverTimestamp(),
                 source: 'admin-pwa',
                 status: 'message_error',

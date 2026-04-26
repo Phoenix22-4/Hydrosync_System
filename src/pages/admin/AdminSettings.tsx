@@ -11,6 +11,7 @@ import {
 import { cn } from '../../lib/utils';
 import { doc, getDoc, setDoc, updateDoc, collection, getDocs, deleteDoc, addDoc, writeBatch, query, where, limit } from 'firebase/firestore';
 import mqtt from 'mqtt';
+import { pruneOldTelemetry } from '../../utils/pruneOldTelemetry';
 
 export default function AdminSettings() {
   const { user, profile } = useAuth();
@@ -26,6 +27,7 @@ export default function AdminSettings() {
   const [editForm, setEditForm] = useState({ url: '', deviceId: '', username: '', password: '' });
   const [testingHostId, setTestingHostId] = useState<string | null>(null);
   const [hostTestResult, setHostTestResult] = useState<Record<string, { ok: boolean; message: string }>>({});
+  const [pruneDays, setPruneDays] = useState(30);
   const [notificationSettings, setNotificationSettings] = useState({
     emailAlerts: true,
     pushNotifications: true,
@@ -355,6 +357,20 @@ export default function AdminSettings() {
     } catch (error) {
       console.error('Error clearing telemetry:', error);
       alert(`Failed to clear telemetry data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const pruneTelemetryHistory = async () => {
+    if (!confirm(`Delete telemetry older than ${pruneDays} days?`)) return;
+    try {
+      setLoading(true);
+      const deleted = await pruneOldTelemetry(pruneDays);
+      alert(`Cleanup complete. Deleted ${deleted} telemetry records older than ${pruneDays} days.`);
+    } catch (error) {
+      console.error('Error pruning telemetry:', error);
+      alert(`Failed to prune telemetry: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
@@ -836,6 +852,28 @@ export default function AdminSettings() {
                 <div className="p-6 space-y-4">
                   <SettingsButton icon={<Download className="w-4 h-4" />} label="Export All Data" desc="Download complete system data as JSON" onClick={exportAllData} loading={loading} />
                   <SettingsButton icon={<Database className="w-4 h-4" />} label="Backup Database" desc="Create a backup of all Firestore collections" onClick={backupDatabase} loading={loading} />
+                  <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl space-y-3">
+                    <p className="text-sm font-bold text-amber-400">Auto Cleanup (Spark Plan Alternative)</p>
+                    <p className="text-xs text-slate-400">Run manual retention cleanup to remove old telemetry if TTL is not enabled.</p>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={1}
+                        value={pruneDays}
+                        onChange={(e) => setPruneDays(Math.max(1, Number(e.target.value || 1)))}
+                        className="w-28 bg-[#1a2234] border border-white/10 rounded-lg px-3 py-2 text-white text-sm"
+                      />
+                      <span className="text-xs text-slate-400">days to keep</span>
+                    </div>
+                    <SettingsButton
+                      icon={<Trash2 className="w-4 h-4" />}
+                      label={`Delete Data Older Than ${pruneDays} Days`}
+                      desc="Deletes old telemetry from all devices subcollections."
+                      danger
+                      onClick={pruneTelemetryHistory}
+                      loading={loading}
+                    />
+                  </div>
                   
                   <div className="pt-4 border-t border-white/5">
                     <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
