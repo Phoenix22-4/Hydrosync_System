@@ -164,15 +164,13 @@ service cloud.firestore {
     // ===============================================================
 
     match /system/{docId} {
-      // System status is readable by everyone (public) to avoid permission errors on landing/login.
-      allow read: if true;
-      allow write: if isAdmin();
+      // Bridge status updates are allowed for autonomous client-side bridge flow.
+      allow read, write: if true;
     }
 
     match /aggregate_hourly/{hourId} {
-      // Aggregated data is readable by everyone (public).
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if true;
     }
 
     match /users/{userId} {
@@ -200,107 +198,69 @@ service cloud.firestore {
     }
 
     match /devices/{deviceId} {
-      // Allow read for:
-      // - Anyone (to check if device exists during registration)
-      // - Admins (full access)
-      // - Authenticated users (for charts and device lists)
-      // - Users who own the device
-      allow read: if true;  // Allow anyone to read device info (needed for registration)
-      
-      // Only admins can create devices
-      allow create: if isAdmin();
-      
-      // Allow update for:
-      // - Admins
-      // - New users claiming unassigned devices during registration
-      // - Device owners updating their own devices
-      allow update: if isAdmin() || (
-        // New user claiming unassigned device
-        isAuthenticated() && 
-        (resource.data.status == 'unassigned' || resource.data.status == 'pending_confirmation') &&
-        request.resource.data.assigned_to_user == request.auth.uid &&
-        request.resource.data.status in ['pending_confirmation', 'active'] &&
-        !hasReachedDeviceLimit(request.auth.uid)
-      ) || (
-        // Device owner updating settings
-        isAuthenticated() && 
-        resource.data.assigned_to_user == request.auth.uid &&
-        resource.data.status == 'active' &&
-        request.resource.data.status == 'active'
-      );
-      
-      // Only superusers can delete devices
+      allow read: if true;
+      allow create: if true;
+      allow update: if true;
       allow delete: if isSuperuser();
     }
 
     // Top-level telemetry collection for aggregated data
     match /telemetry/{docId} {
-      // Authenticated users can read telemetry. Admins can read all.
       allow read: if isAuthenticated() || isAdmin();
-      // Only admins/system can write telemetry.
-      allow write: if isAdmin();
+      allow write: if true;
     }
 
     match /devices/{deviceId}/telemetry/{telemetryId} {
-      // Users can read telemetry for their own devices. Admins can read all.
+      allow create, update: if true;
       allow read: if isAdmin() || (
-        isAuthenticated() && get(/databases/$(database)/documents/devices/$(deviceId)).data.assigned_to_user == request.auth.uid
+        isAuthenticated() &&
+        get(/databases/$(database)/documents/devices/$(deviceId)).data.assigned_to_user == request.auth.uid &&
+        get(/databases/$(database)/documents/devices/$(deviceId)).data.status == 'active'
       );
-      // Only admins/system can write telemetry.
-      allow write: if isAdmin();
+      allow delete: if isSuperuser();
     }
 
     match /devices/{deviceId}/pump_events/{eventId} {
+      allow create: if true;
       allow read: if isAdmin() || (
-        isAuthenticated() && get(/databases/$(database)/documents/devices/$(deviceId)).data.assigned_to_user == request.auth.uid
+        isAuthenticated() &&
+        get(/databases/$(database)/documents/devices/$(deviceId)).data.assigned_to_user == request.auth.uid &&
+        get(/databases/$(database)/documents/devices/$(deviceId)).data.status == 'active'
       );
-      allow write: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isSuperuser();
     }
 
 
 
     match /activity_log/{logId} {
-      // Admins can read/write all. Authenticated users can read activity logs.
-      // Note: device_id in activity_log is the logical device_id (e.g., "HOME_01"), not Firestore doc ID
       allow read: if isAuthenticated() || isAdmin();
-      // Allow create for authenticated users (for logging device linking, etc.)
-      allow create: if isAuthenticated() || isAdmin();
+      allow create: if true;
       allow update, delete: if isSuperuser();
     }
 
     match /alerts/{alertId} {
-      // Users can read their own alerts. Admins can read all.
       allow read: if isAdmin() || (
-        isAuthenticated() && (
-          resource.data.user_id == request.auth.uid
-        )
+        isAuthenticated() && resource.data.user_id == request.auth.uid
       );
-      // Users can mark their own alerts as read.
       allow update: if isAuthenticated() && resource.data.user_id == request.auth.uid &&
                     request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
-      // Admins can create alerts. Users can create alerts for notifications to admin (type: new_user, device_added, etc.)
-      allow create: if isAdmin() || (
-        isAuthenticated() && 
-        request.resource.data.type in ['new_user', 'device_added', 'new_admin'] &&
-        request.resource.data.read == false
-      );
+      allow create: if true;
       allow delete: if isSuperuser();
     }
 
     match /commands/{commandId} {
-      // Users can only see and create commands for devices they own.
-      // Admins can see and create all.
       allow read: if isAdmin() || (
-        isAuthenticated() && 
-        get(/databases/$(database)/documents/devices/$(resource.data.device_id)).data.assigned_to_user == request.auth.uid
+        isAuthenticated() &&
+        get(/databases/$(database)/documents/devices/$(resource.data.device_id)).data.assigned_to_user == request.auth.uid &&
+        get(/databases/$(database)/documents/devices/$(resource.data.device_id)).data.status == 'active'
       );
       allow create: if isAdmin() || (
-        isAuthenticated() && 
-        get(/databases/$(database)/documents/devices/$(request.resource.data.device_id)).data.assigned_to_user == request.auth.uid
+        isAuthenticated() &&
+        get(/databases/$(database)/documents/devices/$(request.resource.data.device_id)).data.assigned_to_user == request.auth.uid &&
+        get(/databases/$(database)/documents/devices/$(request.resource.data.device_id)).data.status == 'active'
       );
-      // Only the bridge/admin can update command status (e.g. from 'pending' to 'completed').
-      allow update: if isAdmin();
-      // Commands should not be deleted by users for audit purposes.
+      allow update: if true;
       allow delete: if isSuperuser();
     }
 
@@ -329,9 +289,8 @@ service cloud.firestore {
 
     // MQTT hosts collection - for managing broker URLs
     match /mqtt_hosts/{hostId} {
-      // Admins can manage MQTT hosts
-      allow read, write: if isAdmin();
-      // Only superusers can delete MQTT hosts
+      allow read: if true;
+      allow write: if isAdmin();
       allow delete: if isSuperuser();
     }
 
