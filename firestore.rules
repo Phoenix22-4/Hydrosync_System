@@ -120,10 +120,6 @@ service cloud.firestore {
       return request.resource.data.keys().hasAll(fields);
     }
 
-    function hasOnlyAllowedFields(fields) {
-      return request.resource.data.keys().hasOnly(fields);
-    }
-
     function areImmutableFieldsUnchanged(fields) {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
     }
@@ -148,15 +144,6 @@ service cloud.firestore {
              data.status in ['pending', 'active', 'blocked'] &&
              (!('region' in data) || (data.region is string && data.region.size() < 100)) &&
              (!('device_ids' in data) || (data.device_ids is list && data.device_ids.size() < 20));
-    }
-
-    function isValidDevice(data) {
-      return hasRequiredFields(['device_id', 'token', 'status']) &&
-             data.device_id is string && data.device_id.size() > 0 && data.device_id.size() < 50 &&
-             data.token is string && data.token.size() > 0 && data.token.size() < 100 &&
-             data.status in ['unassigned', 'active', 'blocked'] &&
-             (!('ohCap' in data) || (data.ohCap is number && data.ohCap >= 0)) &&
-             (!('ugCap' in data) || (data.ugCap is number && data.ugCap >= 0));
     }
 
     // ===============================================================

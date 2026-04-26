@@ -174,6 +174,7 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
             if (parts.length < 2 || parts[0] !== 'devices') return;
             const deviceId = parts[1].trim().toUpperCase();
             if (!deviceId) return;
+            const channel = (parts[2] || '').toLowerCase();
             console.log(`[MQTT Bridge] Message: ${topic} -> ${deviceId}`);
 
             // Update bridge status with last seen topic/device for live diagnostics.
@@ -221,6 +222,12 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
               { merge: true }
             );
             if (isNewDevice) knownDeviceIdsRef.current.add(deviceId);
+
+            // Keep wildcard visibility for all device topics, but write telemetry
+            // only for telemetry/data channels to avoid command payload pollution.
+            if (channel && channel !== 'data' && channel !== 'telemetry') {
+              return;
+            }
 
             await setDoc(
               doc(db, 'system', 'bridge_status'),
