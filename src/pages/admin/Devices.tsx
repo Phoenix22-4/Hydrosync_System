@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, query, onSnapshot, orderBy, updateDoc, doc, limit, addDoc, serverTimestamp, where } from 'firebase/firestore';
+import { collection, query, onSnapshot, orderBy, updateDoc, doc, limit } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../../firebase';
 import { useAuth } from '../../App';
@@ -23,7 +23,6 @@ export default function AdminDevices() {
   const [mqttForm, setMqttForm] = useState({ username: '', password: '', broker: '' });
   const [savingMqtt, setSavingMqtt] = useState(false);
   const [showMqttPassword, setShowMqttPassword] = useState(false);
-  const [hasActiveHosts, setHasActiveHosts] = useState(true);
   const { user } = useAuth();
   const navigate = useNavigate();
   const { status: bridgeStatus } = useAdminMqttAutoRegister(!!user);
@@ -54,12 +53,6 @@ export default function AdminDevices() {
       });
     });
     return () => unsubscribe();
-  }, [user]);
-
-  useEffect(() => {
-    if (!user) return;
-    const hostsQ = query(collection(db, 'mqtt_hosts'), where('status', '==', 'active'));
-    return onSnapshot(hostsQ, (snap) => setHasActiveHosts(!snap.empty));
   }, [user]);
 
   const copyToClipboard = (text: string, id: string) => {
@@ -163,14 +156,15 @@ export default function AdminDevices() {
 
         <PullToRefresh onRefresh={handleRefresh}>
           <div className="p-4 md:p-8 space-y-6">
-            {(bridgeStatus === 'no_hosts' || !hasActiveHosts) && (
+            {bridgeStatus === 'no_hosts' && (
               <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-3">
                 <ServerCrash className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-sm font-bold text-red-400">No active MQTT host configured</p>
+                  <p className="text-sm font-bold text-red-400">MQTT env config missing</p>
                   <p className="text-xs text-red-300/90 mt-1">
-                    Add a document in <code className="bg-black/20 px-1 rounded">mqtt_hosts</code> with
-                    <code className="bg-black/20 px-1 rounded ml-1">status: "active"</code>, plus URL, username, and password.
+                    Set <code className="bg-black/20 px-1 rounded">VITE_MQTT_HOST</code>,{' '}
+                    <code className="bg-black/20 px-1 rounded">VITE_MQTT_USER</code>, and{' '}
+                    <code className="bg-black/20 px-1 rounded">VITE_MQTT_PASS</code> (host must start with <code className="bg-black/20 px-1 rounded">wss://</code>).
                   </p>
                 </div>
               </div>

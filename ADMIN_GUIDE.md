@@ -197,6 +197,29 @@ Refer to the `MQTT_BRIDGE_TEMPLATE.md` file for the complete reference implement
 
 ---
 
+## MQTT Real-Time Auto-Discovery (Option A)
+
+Overview:
+HydroSync admin dashboard now uses a Super User wildcard architecture from the frontend to discover and monitor all ESP32 devices in real-time, without a dedicated always-on Node.js bridge.
+
+How it works:
+- Device level: each ESP32 uses its own credentials and publishes to `devices/[DEVICE_ID]/#`.
+- Dashboard level: admin frontend connects directly to HiveMQ Cloud using WebSockets (`wss://`) and Netlify env vars.
+- Wildcard subscription: dashboard subscribes to `devices/#`.
+- Auto-registration: if incoming topic contains an unknown device ID, dashboard auto-creates `devices/{DEVICE_ID}` in Firestore.
+
+Environment variables:
+- `VITE_MQTT_HOST` (must begin with `wss://`)
+- `VITE_MQTT_USER`
+- `VITE_MQTT_PASS`
+
+Security notes:
+- Never hardcode MQTT super-user credentials in repository code.
+- Firestore device/telemetry writes remain admin-protected by rules.
+- If dashboard is closed, frontend-side auto-discovery is not running.
+
+---
+
 ## Security Protocols
 
 ### 1. Data Integrity
