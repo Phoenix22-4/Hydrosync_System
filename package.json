@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
+    "prebuild": "rimraf dist",
     "build": "vite build",
     "preview": "vite preview",
-    "clean": "rm -rf dist",
+    "clean": "rimraf dist",
     "lint": "tsc --noEmit",
     "cap:sync": "node scripts/cap-sync.mjs",
     "cap:open": "npx cap open android",
@@ -48,6 +49,7 @@
     "autoprefixer": "^10.4.21",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
+    "rimraf": "^6.0.1",
     "typescript": "~5.8.2",
     "vite": "^6.4.2",
     "vite-plugin-pwa": "^1.2.0"

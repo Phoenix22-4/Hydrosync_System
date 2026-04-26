@@ -143,7 +143,7 @@ The system supports both the **current firmware topics** and a **legacy topic fo
 
 - **Telemetry (current)**: `devices/[DEVICE_ID]/#` (commonly `devices/[DEVICE_ID]/data` or `devices/[DEVICE_ID]/telemetry`)
 - **Telemetry (legacy)**: `hydrosync/data/[DEVICE_ID]`
-- **Commands**: `hydrosync/commands/[DEVICE_ID]` (or your device-specific command topic)
+- **Commands**: `devices/[DEVICE_ID]/commands` (firmware-compatible default)
 - **Alerts**: `hydrosync/alerts/[DEVICE_ID]`
 - **Status**: `hydrosync/status/[DEVICE_ID]`
 

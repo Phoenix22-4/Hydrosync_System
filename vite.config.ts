@@ -7,6 +7,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
   return {
+    publicDir: 'public',
     plugins: [
       react(), 
       tailwindcss(),
@@ -15,7 +16,6 @@ export default defineConfig(({mode}) => {
         // only for /setup_Adminhydro (and /admin routes) inside index.html.
         injectRegister: null,
         registerType: 'autoUpdate',
-        includeAssets: ['icon.png'],
         // Disable generated/injected manifest: we ship a static admin manifest in /public.
         manifest: false
       })

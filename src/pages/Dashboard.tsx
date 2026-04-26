@@ -55,6 +55,7 @@ export default function Dashboard() {
   }, []);
 
   const activeDevice = devices[activeDeviceIdx] ?? devices[0];
+  const mqttTopicDeviceId = activeDevice?.mqtt_topic?.trim() || activeDevice?.device_id || activeDevice?.id;
   const resolvedBroker = activeDevice?.mqtt_broker || fallbackBroker;
   const toWsBrokerUrl = (rawBroker: string) => {
     const trimmed = rawBroker.trim();
@@ -80,8 +81,10 @@ export default function Dashboard() {
           const payload = JSON.parse(message.toString());
 
           // Security: Only accept messages for owned devices
+          const topicLc = topic.toLowerCase();
           const isAuthorizedTopic = devices.some(device =>
-            topic.startsWith(`devices/${device.device_id}/`) && device.assigned_to_user === user?.uid
+            topicLc.startsWith(`devices/${(device.mqtt_topic || device.device_id || device.id).toLowerCase()}/`) &&
+            device.assigned_to_user === user?.uid
           );
 
           if (!isAuthorizedTopic) {
@@ -90,10 +93,13 @@ export default function Dashboard() {
           }
 
           // Find which device this message is for
-          const targetDevice = devices.find(device => topic.startsWith(`devices/${device.device_id}/`));
+          const targetDevice = devices.find(device =>
+            topicLc.startsWith(`devices/${(device.mqtt_topic || device.device_id || device.id).toLowerCase()}/`)
+          );
           if (!targetDevice) return;
+          const targetTopicId = targetDevice.mqtt_topic || targetDevice.device_id || targetDevice.id;
 
-          if (topic === `devices/${targetDevice.device_id}/data`) {
+          if (topicLc === `devices/${targetTopicId.toLowerCase()}/data`) {
             // Update telemetry with live data
             setTelemetry({
               recorded_at: serverTimestamp() as any,
@@ -115,7 +121,7 @@ export default function Dashboard() {
                 error_state: payload.system_status,
               });
             }
-          } else if (activeDevice?.device_id && topic === `devices/${activeDevice.device_id}/alerts`) {
+          } else if (activeDevice?.device_id && topicLc === `devices/${mqttTopicDeviceId?.toLowerCase()}/alerts`) {
             // Handle alerts
             console.log('Alert received:', payload);
             // Could add alert handling here
@@ -179,8 +185,8 @@ export default function Dashboard() {
   useEffect(() => {
     if (!activeDevice || !mqttConnected) return;
 
-    const dataTopic = `devices/${activeDevice.id}/data`;
-    const alertTopic = `devices/${activeDevice.id}/alerts`;
+    const dataTopic = `devices/${mqttTopicDeviceId}/data`;
+    const alertTopic = `devices/${mqttTopicDeviceId}/alerts`;
 
     subscribe(dataTopic);
     subscribe(alertTopic);
@@ -188,7 +194,7 @@ export default function Dashboard() {
     return () => {
       // Cleanup would happen in the hook
     };
-  }, [activeDevice, mqttConnected, subscribe]);
+  }, [activeDevice, mqttConnected, subscribe, mqttTopicDeviceId]);
 
   // ── Setup gate ────────────────────────────────────────
   useEffect(() => {
@@ -344,7 +350,7 @@ export default function Dashboard() {
 
       if (mqttConnected) {
         // Use the persistent MQTT connection
-        const commandTopic = `devices/${activeDevice.id}/commands`;
+        const commandTopic = `devices/${mqttTopicDeviceId}/commands`;
         mqttPublish(commandTopic, cmd);
       } else if (resolvedBroker) {
         // Fallback: create temporary connection
@@ -355,7 +361,7 @@ export default function Dashboard() {
             password: activeDevice.mqtt_password,
             clientId: `hydrosync_web_${Math.random().toString(16).slice(2, 8)}`,
           });
-          client.on('connect', () => { client.publish(`devices/${activeDevice.id}/commands`, cmd); client.end(); });
+          client.on('connect', () => { client.publish(`devices/${mqttTopicDeviceId}/commands`, cmd); client.end(); });
           client.on('error',   (err) => { console.error('MQTT:', err); client.end(); });
         } catch (err) {
           console.error('MQTT connect failed:', err);
@@ -370,7 +376,7 @@ export default function Dashboard() {
     } catch (err) {
       console.error('sendCommand error:', err);
     }
-  }, [activeDevice, user, telemetry, mqttConnected, mqttPublish, resolvedBroker]);
+  }, [activeDevice, user, telemetry, mqttConnected, mqttPublish, resolvedBroker, mqttTopicDeviceId]);
 
   // ── Loading ───────────────────────────────────────────
   if (loading) {

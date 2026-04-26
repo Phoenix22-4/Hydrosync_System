@@ -60,8 +60,9 @@ HydroSync is an IoT-based, dual-tank autonomous water management system. The pri
 - **Connectivity:** WiFi (2.4GHz) + MQTT (HiveMQ Cloud).
 - **Security:** TLS 1.2 encryption on port 8883.
 - **MQTT Topics:**
-  - \`hydrosync/data/HydroSync_001\`: Telemetry JSON every 15s.
-  - \`hydrosync/commands/HydroSync_001\`: Remote commands (PUMP_ON, PUMP_OFF, etc.).
+  - \`devices/HydroSync_001/#\`: Telemetry & status (commonly \`devices/HydroSync_001/data\`).
+  - \`hydrosync/data/HydroSync_001\`: Telemetry JSON every 15s (legacy).
+  - \`devices/HydroSync_001/commands\`: Remote commands (PUMP_ON, PUMP_OFF, RESET_ERROR).
   - \`hydrosync/alerts/HydroSync_001\`: Critical events (dry run, empty tank).
   - \`hydrosync/status/HydroSync_001\`: LWT "online"/"offline" status.
 

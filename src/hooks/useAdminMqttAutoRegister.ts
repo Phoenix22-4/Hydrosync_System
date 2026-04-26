@@ -39,7 +39,7 @@ function randomToken32() {
   return Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('').toUpperCase();
 }
 
-function extractDeviceIdFromTopic(topic: string): string | null {
+function extractDeviceIdFromTopic(topic: string): { canonicalId: string; topicId: string } | null {
   const match =
     topic.match(/^devices\/([^/]+)\/data$/) ||
     topic.match(/^devices\/([^/]+)\/telemetry$/) ||
@@ -47,7 +47,12 @@ function extractDeviceIdFromTopic(topic: string): string | null {
     topic.match(/^devices\/([^/]+)$/) ||
     topic.match(/^hydrosync\/data\/([^/]+)$/);
   if (!match?.[1]) return null;
-  return match[1].trim().toUpperCase() || null;
+  const topicId = match[1].trim();
+  if (!topicId) return null;
+  return {
+    canonicalId: topicId.toUpperCase(),
+    topicId,
+  };
 }
 
 export function useAdminMqttAutoRegister(enabled: boolean) {
@@ -128,8 +133,9 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
 
         client.on('message', async (topic, message) => {
           try {
-            const deviceId = extractDeviceIdFromTopic(topic);
-            if (!deviceId) return;
+            const parsed = extractDeviceIdFromTopic(topic);
+            if (!parsed) return;
+            const deviceId = parsed.canonicalId;
 
             let payload: any = null;
             try {
@@ -157,6 +163,7 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
                 mqtt_broker: normalizeBrokerInput(host.url),
                 mqtt_username: host.username?.trim() || null,
                 mqtt_password: host.password?.trim() || null,
+                mqtt_topic: parsed.topicId,
                 last_seen: serverTimestamp(),
               },
               { merge: true }
