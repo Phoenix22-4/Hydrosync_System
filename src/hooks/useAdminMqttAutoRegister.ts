@@ -117,12 +117,45 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
                 'devices/+',
                 'hydrosync/data/+',
               ],
-              { qos: 0 }
+              { qos: 0 },
+              async (subErr, granted) => {
+                if (subErr) {
+                  console.error('[MQTT Bridge] Subscribe failed:', subErr);
+                  await setDoc(
+                    doc(db, 'system', 'bridge_status'),
+                    {
+                      last_seen: serverTimestamp(),
+                      source: 'admin-pwa',
+                      status: 'subscribe_error',
+                      last_error: subErr.message || 'subscribe_failed',
+                    },
+                    { merge: true }
+                  );
+                  return;
+                }
+
+                const denied = (granted || []).filter((g) => g.qos === 128);
+                if (denied.length > 0) {
+                  console.error('[MQTT Bridge] Subscribe denied for topics:', denied.map((d) => d.topic));
+                  await setDoc(
+                    doc(db, 'system', 'bridge_status'),
+                    {
+                      last_seen: serverTimestamp(),
+                      source: 'admin-pwa',
+                      status: 'subscribe_denied',
+                      denied_topics: denied.map((d) => d.topic),
+                    },
+                    { merge: true }
+                  );
+                } else {
+                  console.log('[MQTT Bridge] Subscribed OK:', (granted || []).map((g) => `${g.topic}:${g.qos}`).join(', '));
+                }
+              }
             );
             // heartbeat doc for admin UI
             await setDoc(
               doc(db, 'system', 'bridge_status'),
-              { last_seen: serverTimestamp(), source: 'admin-pwa' },
+              { last_seen: serverTimestamp(), source: 'admin-pwa', status: 'online' },
               { merge: true }
             );
           } catch (e) {
@@ -147,6 +180,7 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
               {
                 last_seen: serverTimestamp(),
                 source: 'admin-pwa',
+                status: 'online',
                 last_topic: topic,
                 last_device_id: deviceId,
               },
@@ -185,6 +219,18 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
               { merge: true }
             );
 
+            await setDoc(
+              doc(db, 'system', 'bridge_status'),
+              {
+                last_seen: serverTimestamp(),
+                source: 'admin-pwa',
+                status: 'online',
+                last_registered_device_id: deviceId,
+                last_registered_at: serverTimestamp(),
+              },
+              { merge: true }
+            );
+
             // Store telemetry snapshot
             await addDoc(collection(db, 'devices', deviceId, 'telemetry'), {
               recorded_at: serverTimestamp(),
@@ -210,6 +256,16 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
             );
           } catch (e) {
             console.error('Admin bridge message handling failed:', e);
+            await setDoc(
+              doc(db, 'system', 'bridge_status'),
+              {
+                last_seen: serverTimestamp(),
+                source: 'admin-pwa',
+                status: 'message_error',
+                last_error: (e as Error)?.message || 'message_handler_failed',
+              },
+              { merge: true }
+            );
           }
         });
       });
