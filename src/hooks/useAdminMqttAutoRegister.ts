@@ -14,7 +14,7 @@ type HostDoc = {
 
 const BRIDGE_SYSTEM_KEY =
   (import.meta.env.VITE_BRIDGE_SYSTEM_KEY as string | undefined)?.trim() ||
-  'HYDROSYNC_BRIDGE_KEY_CHANGE_ME';
+  'HydroSync_iotdevice_2026@kenya';
 
 function normalizeBrokerInput(input: string) {
   const raw = input.trim();

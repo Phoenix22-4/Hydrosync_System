@@ -130,7 +130,7 @@ service cloud.firestore {
 
     function hasValidSystemKey() {
       return request.resource.data.system_key is string &&
-             request.resource.data.system_key == "HYDROSYNC_BRIDGE_KEY_CHANGE_ME";
+             request.resource.data.system_key == "HydroSync_iotdevice_2026@kenya";
     }
 
     // Helper function to count user's devices
@@ -170,12 +170,12 @@ service cloud.firestore {
 
     match /system/{docId} {
       allow read: if true;
-      allow write: if hasValidSystemKey() || isAdmin();
+      allow write: if hasValidSystemKey() || isAdmin() || isSuperuser();
     }
 
     match /aggregate_hourly/{hourId} {
       allow read: if true;
-      allow write: if hasValidSystemKey() || isAdmin();
+      allow write: if hasValidSystemKey() || isAdmin() || isSuperuser();
     }
 
     match /users/{userId} {
@@ -204,18 +204,18 @@ service cloud.firestore {
 
     match /devices/{deviceId} {
       allow read: if true;
-      allow create, update: if hasValidSystemKey() || isAdmin();
+      allow create, update: if hasValidSystemKey() || isAdmin() || isSuperuser();
       allow delete: if isSuperuser();
     }
 
     // Top-level telemetry collection for aggregated data
     match /telemetry/{docId} {
       allow read: if isAuthenticated() || isAdmin();
-      allow write: if hasValidSystemKey() || isAdmin();
+      allow write: if hasValidSystemKey() || isAdmin() || isSuperuser();
     }
 
     match /devices/{deviceId}/telemetry/{telemetryId} {
-      allow create, update: if hasValidSystemKey() || isAdmin();
+      allow create, update: if hasValidSystemKey() || isAdmin() || isSuperuser();
       allow read: if isAdmin() || (
         isAuthenticated() &&
         get(/databases/$(database)/documents/devices/$(deviceId)).data.assigned_to_user == request.auth.uid &&
@@ -225,7 +225,7 @@ service cloud.firestore {
     }
 
     match /devices/{deviceId}/pump_events/{eventId} {
-      allow create: if hasValidSystemKey() || isAdmin();
+      allow create: if hasValidSystemKey() || isAdmin() || isSuperuser();
       allow read: if isAdmin() || (
         isAuthenticated() &&
         get(/databases/$(database)/documents/devices/$(deviceId)).data.assigned_to_user == request.auth.uid &&
@@ -239,7 +239,7 @@ service cloud.firestore {
 
     match /activity_log/{logId} {
       allow read: if isAuthenticated() || isAdmin();
-      allow create: if hasValidSystemKey() || isAuthenticated() || isAdmin();
+      allow create: if hasValidSystemKey() || isAuthenticated() || isAdmin() || isSuperuser();
       allow update, delete: if isSuperuser();
     }
 
@@ -249,7 +249,7 @@ service cloud.firestore {
       );
       allow update: if isAuthenticated() && resource.data.user_id == request.auth.uid &&
                     request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
-      allow create: if hasValidSystemKey() || isAdmin() || isAuthenticated();
+      allow create: if hasValidSystemKey() || isAdmin() || isAuthenticated() || isSuperuser();
       allow delete: if isSuperuser();
     }
 
@@ -264,7 +264,7 @@ service cloud.firestore {
         get(/databases/$(database)/documents/devices/$(request.resource.data.device_id)).data.assigned_to_user == request.auth.uid &&
         get(/databases/$(database)/documents/devices/$(request.resource.data.device_id)).data.status == 'active'
       );
-      allow update: if hasValidSystemKey() || isAdmin();
+      allow update: if hasValidSystemKey() || isAdmin() || isSuperuser();
       allow delete: if isSuperuser();
     }
 
