@@ -59,6 +59,19 @@ function extractDeviceIdFromTopic(topic: string): { canonicalId: string; topicId
   };
 }
 
+async function subscribeTopic(client: MqttClient, topic: string): Promise<{ topic: string; qos: number; error?: string }> {
+  return new Promise((resolve) => {
+    client.subscribe(topic, { qos: 0 }, (err, granted) => {
+      if (err) {
+        resolve({ topic, qos: 128, error: err.message || 'subscribe_failed' });
+        return;
+      }
+      const grant = granted?.[0];
+      resolve({ topic, qos: grant?.qos ?? 128 });
+    });
+  });
+}
+
 export function useAdminMqttAutoRegister(enabled: boolean) {
   const [status, setStatus] = useState<'offline' | 'connecting' | 'online' | 'no_hosts'>('offline');
   const clientsRef = useRef<MqttClient[]>([]);
@@ -112,56 +125,49 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
           console.log(`[MQTT Bridge] Connected: ${host.url}`);
           setStatus('online');
           try {
-            // Subscribe to telemetry topics (support both legacy + current firmware topics)
-            client.subscribe(
-              [
-                'devices/+/data',
-                'devices/+/telemetry',
-                'devices/+/#',
-                'devices/+',
-                'hydrosync/data/+',
-              ],
-              { qos: 0 },
-              async (subErr, granted) => {
-                if (subErr) {
-                  console.error('[MQTT Bridge] Subscribe failed:', subErr);
-                  await setDoc(
-                    doc(db, 'system', 'bridge_status'),
-                    {
-                      system_key: BRIDGE_SYSTEM_KEY,
-                      last_seen: serverTimestamp(),
-                      source: 'admin-pwa',
-                      status: 'subscribe_error',
-                      last_error: subErr.message || 'subscribe_failed',
-                    },
-                    { merge: true }
-                  );
-                  return;
-                }
+            // Subscribe topic-by-topic so one denied wildcard does not break all subscriptions.
+            const requestedTopics = [
+              host.device_id?.trim() ? `devices/${host.device_id.trim()}/#` : '',
+              host.device_id?.trim() ? `devices/${host.device_id.trim()}/data` : '',
+              'devices/+/data',
+              'devices/+/telemetry',
+              'devices/+/#',
+              'devices/+',
+              'hydrosync/data/+',
+            ].filter(Boolean);
 
-                const denied = (granted || []).filter((g) => g.qos === 128);
-                if (denied.length > 0) {
-                  console.error('[MQTT Bridge] Subscribe denied for topics:', denied.map((d) => d.topic));
-                  await setDoc(
-                    doc(db, 'system', 'bridge_status'),
-                    {
-                      system_key: BRIDGE_SYSTEM_KEY,
-                      last_seen: serverTimestamp(),
-                      source: 'admin-pwa',
-                      status: 'subscribe_denied',
-                      denied_topics: denied.map((d) => d.topic),
-                    },
-                    { merge: true }
-                  );
-                } else {
-                  console.log('[MQTT Bridge] Subscribed OK:', (granted || []).map((g) => `${g.topic}:${g.qos}`).join(', '));
-                }
-              }
-            );
+            const uniqueTopics = Array.from(new Set(requestedTopics));
+            const results = await Promise.all(uniqueTopics.map((t) => subscribeTopic(client, t)));
+            const successful = results.filter((r) => r.qos !== 128);
+            const denied = results.filter((r) => r.qos === 128);
+
+            if (denied.length > 0) {
+              console.warn('[MQTT Bridge] Some topics denied:', denied);
+            }
+            if (successful.length > 0) {
+              console.log(
+                '[MQTT Bridge] Subscribed OK:',
+                successful.map((r) => `${r.topic}:${r.qos}`).join(', ')
+              );
+            }
+
+            const bridgeStatus =
+              successful.length > 0 ? 'online' : denied.length > 0 ? 'subscribe_denied' : 'subscribe_error';
             // heartbeat doc for admin UI
             await setDoc(
               doc(db, 'system', 'bridge_status'),
-              { system_key: BRIDGE_SYSTEM_KEY, last_seen: serverTimestamp(), source: 'admin-pwa', status: 'online' },
+              {
+                system_key: BRIDGE_SYSTEM_KEY,
+                last_seen: serverTimestamp(),
+                source: 'admin-pwa',
+                status: bridgeStatus,
+                subscribed_topics: successful.map((r) => r.topic),
+                denied_topics: denied.map((r) => r.topic),
+                last_error:
+                  denied.length > 0
+                    ? denied.map((d) => `${d.topic}: ${d.error || 'denied'}`).join(' | ')
+                    : null,
+              },
               { merge: true }
             );
           } catch (e) {
