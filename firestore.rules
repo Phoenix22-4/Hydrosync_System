@@ -124,6 +124,10 @@ service cloud.firestore {
       return request.resource.data.keys().hasOnly(fields);
     }
 
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
     // Helper function to count user's devices
     function getUserDeviceCount(userId) {
       return get(/databases/$(database)/documents/users/$(userId)).data.device_ids.size();

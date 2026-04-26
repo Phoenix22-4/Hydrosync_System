@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import mqtt, { MqttClient } from 'mqtt';
-import { addDoc, collection, doc, getDoc, getDocs, limit, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import { db } from '../firebase';
 
 type HostDoc = {
@@ -56,7 +56,7 @@ function extractDeviceIdFromTopic(topic: string): { canonicalId: string; topicId
 }
 
 export function useAdminMqttAutoRegister(enabled: boolean) {
-  const [status, setStatus] = useState<'offline' | 'connecting' | 'online'>('offline');
+  const [status, setStatus] = useState<'offline' | 'connecting' | 'online' | 'no_hosts'>('offline');
   const clientsRef = useRef<MqttClient[]>([]);
 
   useEffect(() => {
@@ -67,6 +67,7 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
 
     const start = async () => {
       setStatus('connecting');
+      console.log('[MQTT Bridge] Starting, loading active hosts...');
 
       // Load active hosts
       const hostsSnap = await getDocs(query(collection(db, 'mqtt_hosts'), where('status', '==', 'active')));
@@ -82,7 +83,8 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
       clientsRef.current = [];
 
       if (hosts.length === 0) {
-        setStatus('offline');
+        console.warn('[MQTT Bridge] No active hosts found in mqtt_hosts.');
+        setStatus('no_hosts');
         return;
       }
 
@@ -103,6 +105,7 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
         clientsRef.current.push(client);
 
         client.on('connect', async () => {
+          console.log(`[MQTT Bridge] Connected: ${host.url}`);
           setStatus('online');
           try {
             // Subscribe to telemetry topics (support both legacy + current firmware topics)
@@ -128,7 +131,7 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
         });
 
         client.on('error', (err) => {
-          console.error('Admin bridge MQTT error:', err);
+          console.error('[MQTT Bridge] MQTT error:', err);
         });
 
         client.on('message', async (topic, message) => {
@@ -136,6 +139,7 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
             const parsed = extractDeviceIdFromTopic(topic);
             if (!parsed) return;
             const deviceId = parsed.canonicalId;
+            console.log(`[MQTT Bridge] Message: ${topic} -> ${deviceId}`);
 
             // Update bridge status with last seen topic/device for live diagnostics.
             await setDoc(
