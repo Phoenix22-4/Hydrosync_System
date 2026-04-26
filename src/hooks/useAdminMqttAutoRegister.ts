@@ -1,7 +1,35 @@
 import { useEffect, useRef, useState } from 'react';
 import mqtt, { MqttClient } from 'mqtt';
-import { addDoc, collection, doc, getDoc, getDocs, serverTimestamp, setDoc } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import { db } from '../firebase';
+
+type HostDoc = {
+  id: string;
+  url: string;
+  status: 'active' | 'inactive';
+};
+
+function normalizeBrokerInput(input: string) {
+  const raw = input.trim();
+  if (!raw) return '';
+
+  let noScheme = raw.replace(/^wss?:\/\//i, '').replace(/^https?:\/\//i, '');
+  noScheme = noScheme.replace(/\.([0-9]{2,5})\/mqtt$/i, ':$1/mqtt');
+
+  if (/:[0-9]{2,5}\/mqtt$/i.test(noScheme) || /\/mqtt$/i.test(noScheme)) return noScheme;
+  if (/:[0-9]{2,5}$/i.test(noScheme)) return `${noScheme}/mqtt`;
+  return `${noScheme}:8884/mqtt`;
+}
+
+function toWsUrl(rawHost: string) {
+  const normalized = normalizeBrokerInput(rawHost);
+  if (!normalized) return '';
+  if (normalized.startsWith('ws://') || normalized.startsWith('wss://')) return normalized;
+  if (normalized.startsWith('http://')) return `ws://${normalized.slice(7)}`;
+  if (normalized.startsWith('https://')) return `wss://${normalized.slice(8)}`;
+  if (normalized.includes('/mqtt')) return `wss://${normalized}`;
+  return `wss://${normalized}:8884/mqtt`;
+}
 
 function randomToken32() {
   // 32 hex chars
@@ -37,14 +65,13 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
 
     const start = async () => {
       setStatus('connecting');
-      console.log('[MQTT Bridge] Starting with super-user MQTT env config...');
+      console.log('[MQTT Bridge] Starting with mqtt_hosts URLs + super-user env credentials...');
 
-      const mqttHost = (import.meta.env.VITE_MQTT_HOST as string | undefined)?.trim() || '';
       const mqttUser = (import.meta.env.VITE_MQTT_USER as string | undefined)?.trim() || '';
       const mqttPass = (import.meta.env.VITE_MQTT_PASS as string | undefined)?.trim() || '';
 
-      if (!mqttHost || !mqttUser || !mqttPass || !mqttHost.startsWith('wss://')) {
-        console.error('[MQTT Bridge] Missing/invalid VITE_MQTT_HOST, VITE_MQTT_USER, or VITE_MQTT_PASS.');
+      if (!mqttUser || !mqttPass) {
+        console.error('[MQTT Bridge] Missing VITE_MQTT_USER or VITE_MQTT_PASS.');
         setStatus('no_hosts');
         return;
       }
@@ -72,19 +99,33 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
       });
       clientsRef.current = [];
 
-      const client = mqtt.connect(mqttHost, {
-        username: mqttUser,
-        password: mqttPass,
-        clientId: `hydrosync_super_bridge_${Math.random().toString(16).slice(2, 8)}`,
-        clean: true,
-        reconnectPeriod: 4000,
-        connectTimeout: 10000,
-      });
+      const hostsSnap = await getDocs(query(collection(db, 'mqtt_hosts'), where('status', '==', 'active')));
+      const hosts: HostDoc[] = hostsSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      if (cancelled) return;
 
-      clientsRef.current.push(client);
+      if (hosts.length === 0) {
+        console.warn('[MQTT Bridge] No active hosts in mqtt_hosts.');
+        setStatus('no_hosts');
+        return;
+      }
 
-      client.on('connect', async () => {
-          console.log(`[MQTT Bridge] Connected: ${mqttHost}`);
+      hosts.forEach((host) => {
+        const wsUrl = toWsUrl(host.url || '');
+        if (!wsUrl.startsWith('wss://')) return;
+
+        const client = mqtt.connect(wsUrl, {
+          username: mqttUser,
+          password: mqttPass,
+          clientId: `hydrosync_super_bridge_${Math.random().toString(16).slice(2, 8)}`,
+          clean: true,
+          reconnectPeriod: 4000,
+          connectTimeout: 10000,
+        });
+
+        clientsRef.current.push(client);
+
+        client.on('connect', async () => {
+          console.log(`[MQTT Bridge] Connected: ${wsUrl}`);
           setStatus('online');
           try {
             client.subscribe('devices/#', { qos: 0 }, async (subErr, granted) => {
@@ -114,6 +155,7 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
                 subscribed_topics: ['devices/#'],
                 denied_topics: [],
                 last_error: null,
+                active_host: wsUrl,
               },
               { merge: true }
             );
@@ -122,11 +164,11 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
           }
         });
 
-      client.on('error', (err) => {
-        console.error('[MQTT Bridge] MQTT error:', err);
-      });
+        client.on('error', (err) => {
+          console.error('[MQTT Bridge] MQTT error:', err);
+        });
 
-      client.on('message', async (topic, message) => {
+        client.on('message', async (topic, message) => {
           try {
             const parts = topic.split('/');
             if (parts.length < 2 || parts[0] !== 'devices') return;
@@ -170,7 +212,7 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
                 token,
                 status: (existing.exists() ? (existing.data() as any)?.status : 'unassigned') || 'unassigned',
                 registered_at: firstRegisteredAt || serverTimestamp(),
-                mqtt_broker: mqttHost,
+                mqtt_broker: normalizeBrokerInput(host.url || ''),
                 mqtt_username: mqttUser || null,
                 mqtt_password: mqttPass || null,
                 mqtt_topic: deviceId,
@@ -229,6 +271,7 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
             );
           }
         });
+      });
     };
 
     start().catch((e) => {
