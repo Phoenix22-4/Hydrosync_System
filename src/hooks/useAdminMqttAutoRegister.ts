@@ -126,9 +126,30 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
           setStatus('online');
           try {
             // Subscribe topic-by-topic so one denied wildcard does not break all subscriptions.
+            const knownDeviceIds = new Set<string>();
+            if (host.device_id?.trim()) knownDeviceIds.add(host.device_id.trim());
+            try {
+              const devicesSnap = await getDocs(collection(db, 'devices'));
+              devicesSnap.docs.forEach((d) => {
+                const data = d.data() as { device_id?: string };
+                const id = (data.device_id || d.id || '').trim();
+                if (id) knownDeviceIds.add(id);
+              });
+            } catch (err) {
+              console.warn('[MQTT Bridge] Failed to load existing devices for strict ACL subscribe fallback:', err);
+            }
+
+            const perDeviceTopics = Array.from(knownDeviceIds).flatMap((id) => [
+              `devices/${id}/#`,
+              `devices/${id}/data`,
+              `devices/${id}/telemetry`,
+              `devices/${id}`,
+            ]);
+
             const requestedTopics = [
               host.device_id?.trim() ? `devices/${host.device_id.trim()}/#` : '',
               host.device_id?.trim() ? `devices/${host.device_id.trim()}/data` : '',
+              ...perDeviceTopics,
               'devices/+/data',
               'devices/+/telemetry',
               'devices/+/#',
@@ -161,6 +182,7 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
                 last_seen: serverTimestamp(),
                 source: 'admin-pwa',
                 status: bridgeStatus,
+                acl_mode: successful.some((r) => r.topic.includes('+') || r.topic.includes('#')) ? 'wildcard' : 'strict_device_topics',
                 subscribed_topics: successful.map((r) => r.topic),
                 denied_topics: denied.map((r) => r.topic),
                 last_error:
