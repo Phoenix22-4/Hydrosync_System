@@ -39,6 +39,17 @@ function randomToken32() {
   return Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('').toUpperCase();
 }
 
+function extractDeviceIdFromTopic(topic: string): string | null {
+  const match =
+    topic.match(/^devices\/([^/]+)\/data$/) ||
+    topic.match(/^devices\/([^/]+)\/telemetry$/) ||
+    topic.match(/^devices\/([^/]+)\/.*/) ||
+    topic.match(/^devices\/([^/]+)$/) ||
+    topic.match(/^hydrosync\/data\/([^/]+)$/);
+  if (!match?.[1]) return null;
+  return match[1].trim().toUpperCase() || null;
+}
+
 export function useAdminMqttAutoRegister(enabled: boolean) {
   const [status, setStatus] = useState<'offline' | 'connecting' | 'online'>('offline');
   const clientsRef = useRef<MqttClient[]>([]);
@@ -91,15 +102,14 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
           try {
             // Subscribe to telemetry topics (support both legacy + current firmware topics)
             client.subscribe(
-              ['devices/+/data', 'devices/+/telemetry', 'hydrosync/data/+'],
-              { qos: 0 },
-              (err, granted) => {
-                if (err) {
-                  console.error('Admin bridge subscribe failed:', err);
-                } else {
-                  console.log('Admin bridge subscribed:', granted);
-                }
-              }
+              [
+                'devices/+/data',
+                'devices/+/telemetry',
+                'devices/+/#',
+                'devices/+',
+                'hydrosync/data/+',
+              ],
+              { qos: 0 }
             );
             // heartbeat doc for admin UI
             await setDoc(
@@ -118,17 +128,7 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
 
         client.on('message', async (topic, message) => {
           try {
-            // Supported:
-            // - devices/<DEVICE_ID>/data
-            // - devices/<DEVICE_ID>/telemetry
-            // - hydrosync/data/<DEVICE_ID>
-            const m =
-              topic.match(/^devices\/([^/]+)\/data$/) ||
-              topic.match(/^devices\/([^/]+)\/telemetry$/) ||
-              topic.match(/^hydrosync\/data\/([^/]+)$/);
-            if (!m) return;
-
-            const deviceId = m[1].trim().toUpperCase();
+            const deviceId = extractDeviceIdFromTopic(topic);
             if (!deviceId) return;
 
             let payload: any = null;

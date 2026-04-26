@@ -139,15 +139,18 @@ HydroSync is an IoT-based, dual-tank autonomous water management system engineer
 
 ### MQTT Topics
 
-- **Telemetry**: `hydrosync/data/[DEVICE_ID]`
-- **Commands**: `hydrosync/commands/[DEVICE_ID]`
+The system supports both the **current firmware topics** and a **legacy topic format**:
+
+- **Telemetry (current)**: `devices/[DEVICE_ID]/#` (commonly `devices/[DEVICE_ID]/data` or `devices/[DEVICE_ID]/telemetry`)
+- **Telemetry (legacy)**: `hydrosync/data/[DEVICE_ID]`
+- **Commands**: `hydrosync/commands/[DEVICE_ID]` (or your device-specific command topic)
 - **Alerts**: `hydrosync/alerts/[DEVICE_ID]`
 - **Status**: `hydrosync/status/[DEVICE_ID]`
 
 ### HTTP Endpoints (Internal)
 
 - **AI Diagnostics**: `POST /api/ai_chat` (Proxied to Gemini)
-- **Admin Verification**: `GET /setup_Adminhydro`
+- **Admin Verification**: `GET /setup_adminhydro`
 
 ---
 
@@ -155,7 +158,7 @@ HydroSync is an IoT-based, dual-tank autonomous water management system engineer
 
 The HydroSync Admin Portal is a centralized management interface for system administrators to oversee the entire ecosystem.
 
-> Admin access is intentionally hidden from the public landing page. The entry point is the secure route `/setup_Adminhydro`, and administrative installation prompts should only appear within the admin login workflow.
+> Admin access is intentionally hidden from the public landing page. The entry point is the secure route `/setup_adminhydro`, and administrative installation prompts should only appear within the admin login workflow.
 
 ### 1. Device Management
 
@@ -188,7 +191,7 @@ The "HydroSync Bridge" is a critical Node.js service that synchronizes data betw
 
 Refer to the `MQTT_BRIDGE_TEMPLATE.md` file for the complete reference implementation.
 
-- **Listener**: Subscribes to `devices/+/telemetry` to update Firestore in real-time.
+- **Listener**: Subscribes to `devices/[DEVICE_ID]/#` (including `data` and `telemetry`) and `hydrosync/data/[DEVICE_ID]` to auto-register devices and update Firestore in real-time.
 - **Publisher**: Listens to the `commands` collection in Firestore to push instructions to devices.
 - **Heartbeat**: Updates `system/bridge_status` every 20 seconds to signal operational health.
 
@@ -503,7 +506,7 @@ Device IDs follow a specific format for consistency and validation:
 
 - Validated in AddDevice.tsx and CreateAccount.tsx
 - Firestore uses device_id as document ID
-- MQTT topics use wildcard pattern `device/+/data`
+- MQTT topics support wildcard patterns `devices/+/#` and `hydrosync/data/+`
 
 ---
 
