@@ -137,6 +137,18 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
             if (!parsed) return;
             const deviceId = parsed.canonicalId;
 
+            // Update bridge status with last seen topic/device for live diagnostics.
+            await setDoc(
+              doc(db, 'system', 'bridge_status'),
+              {
+                last_seen: serverTimestamp(),
+                source: 'admin-pwa',
+                last_topic: topic,
+                last_device_id: deviceId,
+              },
+              { merge: true }
+            );
+
             let payload: any = null;
             try {
               payload = JSON.parse(message.toString());

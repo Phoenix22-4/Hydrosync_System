@@ -10,3 +10,10 @@
   from = "/*"
   to = "/index.html"
   status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # Keep CSP strict enough for production, but allow eval for libraries
+    # that rely on dynamic code generation in browser bundles.
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; connect-src 'self' https: wss:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https:; font-src 'self' data: https:; worker-src 'self' blob:; manifest-src 'self'; frame-ancestors 'none'; base-uri 'self';"
