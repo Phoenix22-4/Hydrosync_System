@@ -229,11 +229,9 @@ service cloud.firestore {
 
 
     match /activity_log/{logId} {
-      // Users can read activity logs for their own devices or where they are the user
+      // Users can read their own activity logs, admins can read all
       allow read: if isAuthenticated() && (
-        resource.data.user_id == request.auth.uid ||
-        resource.data.device_id in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.device_ids ||
-        isAdmin()
+        isAdmin() || resource.data.user_id == request.auth.uid
       );
       // Allow create for authenticated users and admins
       allow create: if isAuthenticated() && (
@@ -245,17 +243,10 @@ service cloud.firestore {
     match /alerts/{alertId} {
       // Users can read alerts where they are the recipient
       allow read: if isAdmin() || (
-        isAuthenticated() && (
-          resource.data.user_id == request.auth.uid ||
-          request.auth.uid in resource.data.recipients ||
-          resource.data.device_id in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.device_ids
-        )
+        isAuthenticated() && resource.data.user_id == request.auth.uid
       );
       // Users can update their own alerts (mark as read)
-      allow update: if isAuthenticated() && (
-        resource.data.user_id == request.auth.uid ||
-        request.auth.uid in resource.data.recipients
-      ) &&
+      allow update: if isAuthenticated() && resource.data.user_id == request.auth.uid &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'read_at']);
       // Allow create for system alerts and admins
       allow create: if isAdmin() || (

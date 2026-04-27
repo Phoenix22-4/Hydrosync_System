@@ -39,9 +39,14 @@ export default function History() {
   useEffect(() => {
     if (!user) return;
     const q = query(collection(db, 'devices'), where('assigned_to_user', '==', user.uid));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setDevices(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Device)));
-    });
+    const unsubscribe = onSnapshot(q, 
+      (snapshot) => {
+        setDevices(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Device)));
+      },
+      (error) => {
+        console.error('Devices listener error:', error);
+      }
+    );
     return () => unsubscribe();
   }, [user]);
 
@@ -55,10 +60,16 @@ export default function History() {
       orderBy('recorded_at', 'desc'),
       limit(limitCount)
     );
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setTelemetry(snapshot.docs.map(doc => doc.data() as Telemetry).reverse());
-      setLoading(false);
-    });
+    const unsubscribe = onSnapshot(q, 
+      (snapshot) => {
+        setTelemetry(snapshot.docs.map(doc => doc.data() as Telemetry).reverse());
+        setLoading(false);
+      },
+      (error) => {
+        console.error('Telemetry listener error:', error);
+        setLoading(false);
+      }
+    );
     return () => unsubscribe();
   }, [activeDevice, period]);
 
@@ -71,24 +82,27 @@ export default function History() {
       orderBy('timestamp', 'desc'),
       limit(100)
     );
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const logs = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          timestamp: data.timestamp,
-          action: data.action || 'System event',
-          performed_by: data.performed_by,
-          device_id: activeDevice.id,
-          user_id: data.user_id
-        } as ActivityLog;
-      });
-      setActivityLogs(logs);
-      setLogsLoading(false);
-    }, (error) => {
-      console.error('Error fetching logs:', error);
-      setLogsLoading(false);
-    });
+    const unsubscribe = onSnapshot(q, 
+      (snapshot) => {
+        const logs = snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            timestamp: data.timestamp,
+            action: data.action || 'System event',
+            performed_by: data.performed_by,
+            device_id: activeDevice.id,
+            user_id: data.user_id
+          } as ActivityLog;
+        });
+        setActivityLogs(logs);
+        setLogsLoading(false);
+      },
+      (error) => {
+        console.error('Activity logs listener error:', error);
+        setLogsLoading(false);
+      }
+    );
     return () => unsubscribe();
   }, [activeDevice]);
 
@@ -297,13 +311,13 @@ export default function History() {
                 </div>
 
                 {/* Right Side - Chart */}
-                <div className="min-h-[280px] h-[280px] relative">
+                <div className="h-[280px] relative">
                   {loading ? (
                     <div className="h-full flex items-center justify-center">
                       <Loader2 className="w-6 h-6 animate-spin text-cyan-500" />
                     </div>
-                  ) : chartData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%" minWidth={200} minHeight={280}>
+                  ) : expandedSection === 'water' && chartData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                         <defs>
                           <linearGradient id="colorOH" x1="0" y1="0" x2="0" y2="1">
@@ -419,13 +433,13 @@ export default function History() {
                 </div>
 
                 {/* Right Side - Chart */}
-                <div className="min-h-[280px] h-[280px] relative">
+                <div className="h-[280px] relative">
                   {loading ? (
                     <div className="h-full flex items-center justify-center">
                       <Loader2 className="w-6 h-6 animate-spin text-orange-500" />
                     </div>
-                  ) : chartData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%" minWidth={200} minHeight={280}>
+                  ) : expandedSection === 'power' && chartData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
                         <XAxis 
