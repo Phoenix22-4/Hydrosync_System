@@ -273,6 +273,327 @@ Enable debug logging in browser console:
 localStorage.setItem('debug', 'hydrosync:*');
 \`\`\`
     `
+  },
+  {
+    id: 'environment-setup',
+    title: 'Environment Setup (Netlify)',
+    content: `
+## Environment Variables
+Configure these in Netlify dashboard under Site Settings > Environment Variables.
+
+### Required Variables
+| Variable | Description | Example |
+|----------|-------------|---------|
+| \`VITE_MQTT_USERNAME\` | MQTT broker username | \`superuser\` |
+| \`VITE_MQTT_PASSWORD\` | MQTT broker password | \`your-secure-password\` |
+| \`VITE_GEMINI_API_KEY\` | Google Gemini AI API key | \`AIzaSy...\` |
+
+### Setting Up in Netlify
+1. Go to Site Settings > Environment Variables
+2. Click "Add a variable"
+3. Enter key-value pairs
+4. Deploy to apply changes
+
+### MQTT Credentials
+The MQTT username and password are used for:
+- Admin MQTT bridge connection
+- Device authentication
+- Real-time telemetry updates
+
+### Gemini AI Integration
+The Gemini API key enables:
+- AI-powered chatbot assistance
+- Diagnostic recommendations
+- Natural language queries
+
+## Local Development
+Create a \`.env\` file in the project root:
+\`\`\`
+VITE_MQTT_USERNAME=your_username
+VITE_MQTT_PASSWORD=your_password
+VITE_GEMINI_API_KEY=your_api_key
+\`\`\`
+    `
+  },
+  {
+    id: 'user-flow',
+    title: 'User Registration Flow',
+    content: `
+## Complete User Journey
+
+### Step 1: Create Account
+1. User visits landing page or opens mobile app
+2. Clicks "Create Account"
+3. Enters name, email, password, and optional Device ID
+4. Firebase Auth creates account
+5. Verification email is sent automatically
+
+### Step 2: Email Verification
+1. User receives email from Firebase
+2. Clicks verification link
+3. Email status updates in Firebase Auth
+4. User can now proceed to token confirmation
+
+### Step 3: Token Confirmation
+1. After email verification, user sees device token
+2. Token is displayed with copy button
+3. User copies token and pastes it
+4. System verifies token matches device record
+5. Device status changes to "active"
+6. User status changes to "active"
+
+### Step 4: Device Setup
+1. First-time dashboard visit triggers setup gate
+2. User enters device name, tank capacities, region
+3. Device is fully configured
+
+### Step 5: Normal Operation
+- Real-time telemetry via MQTT
+- Pump control from dashboard
+- Alerts and notifications
+- History and analytics access
+
+## Status States
+| Status | Description |
+|--------|-------------|
+| \`pending\` | Email not verified or token not confirmed |
+| \`active\` | Fully verified and operational |
+| \`blocked\` | Account suspended by admin |
+    `
+  },
+  {
+    id: 'admin-features',
+    title: 'Admin Panel Features',
+    content: `
+## Admin Dashboard
+- **Overview**: System statistics, device counts, user counts
+- **Recent Alerts**: Last 5 critical alerts
+- **Quick Actions**: Navigation to all admin sections
+
+## Device Management
+- View all registered devices
+- Real-time status monitoring
+- Edit device details (name, capacities, region)
+- Assign/unassign devices to users
+- View telemetry history
+- Block/unblock devices
+
+## User Management
+- View all registered users
+- Filter by status (pending, active, blocked)
+- Edit user details
+- Change user roles (user, admin)
+- Block/unblock accounts
+- View user's devices
+
+## MQTT Host Management
+- Add multiple MQTT brokers
+- Test broker connectivity
+- Assign brokers to specific devices
+- Set global default broker
+
+## System Settings
+- Account management
+- Notification preferences
+- Data export (CSV)
+- System reset options
+
+## Alerts & Logs
+- View all system alerts
+- Mark alerts as read
+- Activity log with timestamps
+- Filter by device, user, or action type
+
+## Charts & Analytics
+- Aggregate water usage charts
+- Power consumption trends
+- Device comparison graphs
+- Date range filtering
+    `
+  },
+  {
+    id: 'pwa-installation',
+    title: 'PWA Installation',
+    content: `
+## Progressive Web App (PWA)
+
+### What is PWA?
+HydroSync can be installed as a standalone app on desktop and mobile devices, providing:
+- Offline capability
+- Home screen icon
+- Full-screen experience
+- Push notifications
+
+### Installing on Desktop (Chrome/Edge)
+1. Visit the HydroSync website
+2. Click the install icon in address bar
+3. Or use menu > "Install HydroSync"
+4. App opens in its own window
+
+### Installing on Mobile (Android)
+1. Visit the website in Chrome
+2. Tap menu (three dots)
+3. Select "Add to Home Screen"
+4. Tap "Install"
+5. App icon appears on home screen
+
+### Installing on iOS
+1. Visit the website in Safari
+2. Tap the share button
+3. Select "Add to Home Screen"
+4. Tap "Add"
+5. App icon appears on home screen
+
+### PWA vs Native App
+| Feature | PWA | Native APK |
+|---------|-----|-----------|
+| Installation | Browser | APK file |
+| Updates | Automatic | Manual |
+| Offline | Limited | Full |
+| Push Notifications | Yes | Yes |
+| App Store | No | No |
+
+### Admin PWA
+The admin panel is also PWA-enabled. When installed:
+- Opens directly to Admin Login
+- No landing page shown
+- Full admin functionality
+    `
+  },
+  {
+    id: 'mobile-apk',
+    title: 'Mobile APK (Capacitor)',
+    content: `
+## Building Android APK
+
+### Prerequisites
+- Node.js 18+
+- Android Studio
+- Java JDK 17+
+- Gradle
+
+### Build Steps
+\`\`\`bash
+# 1. Build the web app
+npm run build
+
+# 2. Sync with Capacitor
+npx cap sync android
+
+# 3. Open in Android Studio
+npx cap open android
+
+# 4. Build APK in Android Studio
+# Build > Build Bundle(s) / APK(s) > Build APK(s)
+\`\`\`
+
+### APK Output Location
+\`\`\`
+android/app/build/outputs/apk/debug/app-debug.apk
+\`\`\`
+
+### Release Build
+\`\`\`bash
+# Generate signed APK
+cd android
+./gradlew assembleRelease
+\`\`\`
+
+### Capacitor Configuration
+File: \`capacitor.config.ts\`
+\`\`\`typescript
+import { CapacitorConfig } from '@capacitor/cli';
+
+const config: CapacitorConfig = {
+  appId: 'com.hydrosync.app',
+  appName: 'HydroSync',
+  webDir: 'dist',
+  server: {
+    androidScheme: 'https'
+  }
+};
+
+export default config;
+\`\`\`
+
+### Native Features
+- Push notifications via FCM
+- Offline data storage
+- Native splash screen
+- Status bar customization
+- Safe area handling
+    `
+  },
+  {
+    id: 'security-rules',
+    title: 'Firestore Security Rules',
+    content: `
+## Security Rules Overview
+
+### Core Principles
+1. Users can only access their own data
+2. Admins have read access to all data
+3. Superusers have full access
+4. Devices are protected by ownership
+
+### Rules Structure
+\`\`\`javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isSuperuser() {
+      return isAuthenticated() && 
+        request.auth.token.email == "visiontech072025@gmail.com";
+    }
+    
+    function isAdmin(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data.role 
+        in ['admin', 'superuser'];
+    }
+    
+    function ownsDevice(deviceId) {
+      return isAuthenticated() &&
+        get(/databases/$(database)/documents/devices/$(deviceId)).data.assigned_to_user 
+          == request.auth.uid;
+    }
+    
+    // Users collection
+    match /users/{userId} {
+      allow read: if isAuthenticated() && 
+        (request.auth.uid == userId || isSuperuser());
+      allow write: if isSuperuser();
+      allow update: if isAuthenticated() && 
+        request.auth.uid == userId;
+    }
+    
+    // Devices collection
+    match /devices/{deviceId} {
+      allow read: if isAuthenticated() && 
+        (ownsDevice(deviceId) || isSuperuser());
+      allow write: if isSuperuser();
+    }
+    
+    // Telemetry subcollection
+    match /devices/{deviceId}/telemetry/{docId} {
+      allow read: if ownsDevice(deviceId) || isSuperuser();
+      allow write: if false; // Only via Cloud Functions
+    }
+  }
+}
+\`\`\`
+
+### Testing Rules
+Use Firebase Emulator for local testing:
+\`\`\`bash
+firebase emulators:start --only firestore
+\`\`\`
+    `
   }
 ];
 

@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { reload } from 'firebase/auth';
 import { auth, db } from '../firebase';
 import { motion } from 'motion/react';
-import { Key, AlertCircle, Loader2, CheckCircle2, ArrowLeft, Copy } from 'lucide-react';
+import { Key, AlertCircle, Loader2, CheckCircle2, ArrowLeft, Copy, Mail, RefreshCw } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export default function ConfirmToken() {
@@ -14,6 +15,8 @@ export default function ConfirmToken() {
   const [deviceToken, setDeviceToken] = useState<string | null>(null);
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(false);
+  const [checkingVerification, setCheckingVerification] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -27,6 +30,36 @@ export default function ConfirmToken() {
       setDeviceId(state.deviceId);
     }
   }, [location]);
+
+  // Check email verification status
+  useEffect(() => {
+    if (!auth.currentUser) {
+      navigate('/login');
+      return;
+    }
+
+    // Initial check
+    const checkVerification = async () => {
+      if (auth.currentUser) {
+        await reload(auth.currentUser);
+        setEmailVerified(auth.currentUser.emailVerified);
+        setCheckingVerification(false);
+      }
+    };
+    checkVerification();
+
+    // Poll for verification status every 3 seconds
+    const interval = setInterval(async () => {
+      if (auth.currentUser && !auth.currentUser.emailVerified) {
+        await reload(auth.currentUser);
+        if (auth.currentUser.emailVerified) {
+          setEmailVerified(true);
+        }
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [navigate]);
 
   useEffect(() => {
     // User must be logged in
@@ -188,7 +221,7 @@ export default function ConfirmToken() {
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-white text-center">Confirm Device Ownership</h1>
           <p className="text-slate-400 mt-2 text-sm text-center leading-relaxed">
-            Copy your device token below and paste it to verify ownership.
+            {emailVerified ? 'Copy your device token below and paste it to verify ownership.' : 'Please verify your email first to continue.'}
           </p>
         </div>
 
@@ -203,81 +236,106 @@ export default function ConfirmToken() {
           </motion.div>
         )}
 
-        {/* Token Display Section */}
-        {deviceId && deviceToken && (
-          <div className="bg-[#1a2234] border border-white/5 rounded-xl p-4 mb-6 space-y-3">
-            <div className="flex justify-between text-xs">
-              <span className="text-slate-500">Device ID</span>
-              <span className="text-cyan-400 font-mono font-semibold">{deviceId}</span>
-            </div>
-            <div className="flex justify-between text-xs">
-              <span className="text-slate-500">Your Email</span>
-              <span className="text-white font-semibold">{auth.currentUser?.email ? maskEmail(auth.currentUser.email) : 'N/A'}</span>
-            </div>
-            
-            {/* Token Display */}
-            <div className="pt-3 border-t border-white/5">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-xs text-slate-500">Your Device Token (32 characters)</span>
-                <button
-                  onClick={copyToken}
-                  className="text-xs font-bold text-cyan-400 hover:text-cyan-300 flex items-center gap-1"
-                >
-                  {copied ? <CheckCircle2 className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                  {copied ? 'Copied!' : 'Copy'}
-                </button>
-              </div>
-              <div className="bg-[#0f172a] border border-cyan-500/20 rounded-lg p-3">
-                <code className="text-xs font-mono text-cyan-400 break-all leading-relaxed">
-                  {deviceToken}
-                </code>
-              </div>
-              <p className="text-[10px] text-slate-500 mt-2">
-                Copy this token and paste it below to verify your device ownership.
-              </p>
-            </div>
+        {/* Email Verification Pending State */}
+        {checkingVerification ? (
+          <div className="flex flex-col items-center justify-center py-8">
+            <Loader2 className="w-8 h-8 text-cyan-500 animate-spin mb-4" />
+            <p className="text-slate-400 text-sm">Checking verification status...</p>
           </div>
-        )}
-
-        <form onSubmit={handleConfirm} className="space-y-6">
-          <div className="space-y-2">
-            <label className="text-xs font-bold text-cyan-500 uppercase tracking-wider ml-1">Device Token</label>
-            <input
-              type="text"
-              value={token}
-              onChange={(e) => {
-                // Strip non-alphanumeric chars, keep up to 32 chars
-                const raw = e.target.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 32);
-                setToken(raw);
-              }}
-              placeholder="Paste your 32-character token here"
-              required
-              maxLength={40}
-              className="w-full bg-[#1a2234] border border-white/5 rounded-xl py-4 px-4 text-white text-center text-sm font-mono tracking-widest placeholder:text-slate-600 placeholder:text-sm placeholder:font-sans focus:outline-none focus:ring-2 focus:ring-cyan-500/50 transition-all"
-            />
-            <p className="text-[11px] text-slate-600 mt-2 ml-1">
-              Tokens are permanent for each device. Enter the exact 32-character token shown above.
+        ) : !emailVerified ? (
+          <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-6 text-center">
+            <div className="w-16 h-16 bg-orange-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Mail className="w-8 h-8 text-orange-500" />
+            </div>
+            <h3 className="text-lg font-bold text-white mb-2">Email Not Verified</h3>
+            <p className="text-slate-400 text-sm mb-4 leading-relaxed">
+              A verification email has been sent to <span className="text-cyan-400 font-semibold">{auth.currentUser?.email}</span>.
+              Please check your inbox and click the verification link.
             </p>
+            <div className="flex items-center justify-center gap-2 text-orange-400 text-xs">
+              <RefreshCw className="w-3 h-3 animate-spin" />
+              <span>Waiting for email verification...</span>
+            </div>
           </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className={cn(
-              "w-full py-4 rounded-xl font-bold text-white shadow-lg shadow-cyan-500/20 transition-all active:scale-[0.98] disabled:opacity-50",
-              "bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400"
-            )}
-          >
-            {loading ? (
-              <div className="flex items-center justify-center gap-2">
-                <Loader2 className="w-5 h-5 animate-spin" />
-                <span>Verifying...</span>
+        ) : (
+          <>
+            {/* Token Display Section - Only shown after email verification */}
+            {deviceId && deviceToken && (
+              <div className="bg-[#1a2234] border border-white/5 rounded-xl p-4 mb-6 space-y-3">
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-500">Device ID</span>
+                  <span className="text-cyan-400 font-mono font-semibold">{deviceId}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-500">Your Email</span>
+                  <span className="text-white font-semibold">{auth.currentUser?.email ? maskEmail(auth.currentUser.email) : 'N/A'}</span>
+                </div>
+                
+                {/* Token Display */}
+                <div className="pt-3 border-t border-white/5">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-xs text-slate-500">Your Device Token (32 characters)</span>
+                    <button
+                      onClick={copyToken}
+                      className="text-xs font-bold text-cyan-400 hover:text-cyan-300 flex items-center gap-1"
+                    >
+                      {copied ? <CheckCircle2 className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                      {copied ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                  <div className="bg-[#0f172a] border border-cyan-500/20 rounded-lg p-3">
+                    <code className="text-xs font-mono text-cyan-400 break-all leading-relaxed">
+                      {deviceToken}
+                    </code>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-2">
+                    Copy this token and paste it below to verify your device ownership.
+                  </p>
+                </div>
               </div>
-            ) : (
-              "Verify Token & Activate →"
             )}
-          </button>
-        </form>
+
+            <form onSubmit={handleConfirm} className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-cyan-500 uppercase tracking-wider ml-1">Device Token</label>
+                <input
+                  type="text"
+                  value={token}
+                  onChange={(e) => {
+                    // Strip non-alphanumeric chars, keep up to 32 chars
+                    const raw = e.target.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 32);
+                    setToken(raw);
+                  }}
+                  placeholder="Paste your 32-character token here"
+                  required
+                  maxLength={40}
+                  className="w-full bg-[#1a2234] border border-white/5 rounded-xl py-4 px-4 text-white text-center text-sm font-mono tracking-widest placeholder:text-slate-600 placeholder:text-sm placeholder:font-sans focus:outline-none focus:ring-2 focus:ring-cyan-500/50 transition-all"
+                />
+                <p className="text-[11px] text-slate-600 mt-2 ml-1">
+                  Tokens are permanent for each device. Enter the exact 32-character token shown above.
+                </p>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className={cn(
+                  "w-full py-4 rounded-xl font-bold text-white shadow-lg shadow-cyan-500/20 transition-all active:scale-[0.98] disabled:opacity-50",
+                  "bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400"
+                )}
+              >
+                {loading ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>Verifying...</span>
+                  </div>
+                ) : (
+                  "Verify Token & Activate →"
+                )}
+              </button>
+            </form>
+          </>
+        )}
 
         <div className="mt-8 pt-6 border-t border-white/5 text-center">
           <p className="text-slate-500 text-xs leading-relaxed">

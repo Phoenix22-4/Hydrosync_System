@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   collection, query, where, onSnapshot, doc, updateDoc,
-  orderBy, addDoc, serverTimestamp, getDocs
+  orderBy, addDoc, serverTimestamp, getDocs, limit
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../App';

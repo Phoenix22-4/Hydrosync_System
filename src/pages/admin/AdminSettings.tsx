@@ -434,7 +434,7 @@ export default function AdminSettings() {
     try {
       setLoading(true);
       await auth.signOut();
-      navigate('/login');
+      navigate('/setup_adminhydro');
     } catch (error) {
       console.error('Error logging out:', error);
       alert('Failed to log out');

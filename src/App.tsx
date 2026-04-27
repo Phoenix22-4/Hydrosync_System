@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { AlertTriangle, ShieldCheck, Loader2, CheckCircle2 } from 'lucide-react';
 import { useNotifications } from './hooks/useNotifications';
 import { Capacitor } from '@capacitor/core';
-import { shouldForceNativeUserFlow } from './lib/platform';
+import { shouldForceNativeUserFlow, shouldSkipLandingPage } from './lib/platform';
 import { useAdminMqttAutoRegister } from './hooks/useAdminMqttAutoRegister';
 
 // Lazy Load Pages for Security & Performance (F12 Console Protection)
@@ -135,28 +135,13 @@ export default function App() {
               </button>
             </div>
           )}
-          {/* Email Verified Success Banner */}
-          {user && user.emailVerified && profile?.status === 'pending' && (
-            <div className="bg-green-500/10 border-b border-green-500/20 px-6 py-2 flex items-center justify-between gap-4 sticky top-0 z-[60] backdrop-blur-md">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-green-500" />
-                <p className="text-[10px] font-bold text-green-400 uppercase tracking-widest">Email verified! Please confirm your device token to activate your account.</p>
-              </div>
-              <button 
-                onClick={() => window.location.href = '/confirm-token'}
-                className="text-[10px] font-bold text-white bg-green-500 px-3 py-1 rounded-full uppercase tracking-widest hover:bg-green-400 transition-colors"
-              >
-                Enter Token
-              </button>
-            </div>
-          )}
           <AppErrorBoundary>
             <Suspense fallback={<LoadingScreen />}>
               <AnimatePresence mode="wait">
                 <AdminMqttBridge enabled={!!user && isAdmin} />
                 <Routes>
-                {/* Public Website or App Login */}
-                <Route path="/" element={Capacitor.isNativePlatform() ? <Login /> : <LandingPage />} />
+                {/* Public Website or App Login - Skip landing page for native apps and PWAs */}
+                <Route path="/" element={shouldSkipLandingPage() ? <Login /> : <LandingPage />} />
                 
                 {/* Auth Routes */}
                 <Route path="/login" element={<UserWebGuard><Login /></UserWebGuard>} />

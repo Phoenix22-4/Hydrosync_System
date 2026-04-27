@@ -13,3 +13,18 @@ export function isMobileBrowser(): boolean {
 export function shouldForceNativeUserFlow(): boolean {
   return isMobileBrowser();
 }
+
+// Detect if running as PWA (standalone mode)
+export function isPWA(): boolean {
+  if (typeof window === 'undefined') return false;
+  // Check for standalone display mode
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+  // iOS Safari standalone
+  const isIOSStandalone = (navigator as any).standalone === true;
+  return isStandalone || isIOSStandalone;
+}
+
+// Check if should skip landing page (native app or PWA)
+export function shouldSkipLandingPage(): boolean {
+  return isNativeApp() || isPWA();
+}
