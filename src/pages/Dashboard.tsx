@@ -767,11 +767,31 @@ export default function Dashboard() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Overhead (L)</label>
-                  <input type="number" value={setupData.ohCap} onChange={(e) => setSetupData({ ...setupData, ohCap: e.target.value })} placeholder="2000" required className="w-full bg-[#1a2234] border border-white/5 rounded-xl py-3 px-4 text-white text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/50 transition-all" />
+                  <input 
+                    type="number" 
+                    value={setupData.ohCap} 
+                    onChange={(e) => setSetupData({ ...setupData, ohCap: e.target.value })} 
+                    placeholder="2000" 
+                    required 
+                    min="1"
+                    max="99999"
+                    step="1"
+                    className="w-full bg-[#1a2234] border border-white/5 rounded-xl py-3 px-4 text-white text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/50 transition-all" 
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Underground (L)</label>
-                  <input type="number" value={setupData.ugCap} onChange={(e) => setSetupData({ ...setupData, ugCap: e.target.value })} placeholder="5000" required className="w-full bg-[#1a2234] border border-white/5 rounded-xl py-3 px-4 text-white text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/50 transition-all" />
+                  <input 
+                    type="number" 
+                    value={setupData.ugCap} 
+                    onChange={(e) => setSetupData({ ...setupData, ugCap: e.target.value })} 
+                    placeholder="5000" 
+                    required 
+                    min="1"
+                    max="99999"
+                    step="1"
+                    className="w-full bg-[#1a2234] border border-white/5 rounded-xl py-3 px-4 text-white text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/50 transition-all" 
+                  />
                 </div>
               </div>
 

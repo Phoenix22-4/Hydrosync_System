@@ -9,6 +9,11 @@ type HostDoc = {
   status: 'active' | 'inactive';
 };
 
+// Global registry to prevent duplicate bridge connections
+const globalBridgeClients = new Map<string, MqttClient>();
+let lastStatusUpdate = 0;
+const STATUS_UPDATE_INTERVAL = 30000; // Only update status every 30 seconds
+
 function normalizeBrokerInput(input: string) {
   const raw = input.trim();
   if (!raw) return '';
@@ -56,6 +61,8 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
   const [status, setStatus] = useState<'offline' | 'connecting' | 'online' | 'no_hosts'>('offline');
   const clientsRef = useRef<MqttClient[]>([]);
   const knownDeviceIdsRef = useRef<Set<string>>(new Set());
+  const statusTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isUpdatingStatusRef = useRef(false);
 
   useEffect(() => {
     if (!enabled) return;
@@ -113,16 +120,54 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
         const wsUrl = toWsUrl(host.url || '');
         if (!wsUrl.startsWith('wss://')) return;
 
+        // Check if we already have a connection for this host
+        const connectionKey = `${wsUrl}_${mqttUser}`;
+        if (globalBridgeClients.has(connectionKey)) {
+          console.log(`[MQTT Bridge] Reusing existing connection for ${wsUrl}`);
+          const existingClient = globalBridgeClients.get(connectionKey)!;
+          clientsRef.current.push(existingClient);
+          return;
+        }
+
         const client = mqtt.connect(wsUrl, {
           username: mqttUser,
           password: mqttPass,
-          clientId: `hydrosync_super_bridge_${Math.random().toString(16).slice(2, 8)}`,
+          clientId: `hydrosync_bridge_${Date.now()}_${Math.random().toString(16).slice(2, 6)}`,
           clean: true,
-          reconnectPeriod: 4000,
-          connectTimeout: 10000,
+          reconnectPeriod: 10000, // Increased to 10 seconds
+          connectTimeout: 30000,   // Increased to 30 seconds
+          keepalive: 60,
         });
 
+        // Store in global registry
+        globalBridgeClients.set(connectionKey, client);
         clientsRef.current.push(client);
+
+        // Debounced status update function
+        const debouncedStatusUpdate = async (updateData: any) => {
+          const now = Date.now();
+          if (now - lastStatusUpdate < STATUS_UPDATE_INTERVAL && isUpdatingStatusRef.current) {
+            // Schedule update for later if one is already in progress
+            if (statusTimeoutRef.current) {
+              clearTimeout(statusTimeoutRef.current);
+            }
+            statusTimeoutRef.current = setTimeout(() => {
+              debouncedStatusUpdate(updateData);
+            }, STATUS_UPDATE_INTERVAL);
+            return;
+          }
+
+          isUpdatingStatusRef.current = true;
+          lastStatusUpdate = now;
+
+          try {
+            await setDoc(doc(db, 'system', 'bridge_status'), updateData, { merge: true });
+          } catch (e) {
+            console.error('Bridge status update failed:', e);
+          } finally {
+            isUpdatingStatusRef.current = false;
+          }
+        };
 
         client.on('connect', async () => {
           console.log(`[MQTT Bridge] Connected: ${wsUrl}`);
@@ -131,34 +176,26 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
             client.subscribe('devices/#', { qos: 0 }, async (subErr, granted) => {
               if (subErr) {
                 console.error('[MQTT Bridge] Subscribe failed:', subErr);
-                await setDoc(
-                  doc(db, 'system', 'bridge_status'),
-                  {
-                    last_seen: serverTimestamp(),
-                    source: 'admin-pwa',
-                    status: 'subscribe_error',
-                    last_error: subErr.message || 'subscribe_failed',
-                  },
-                  { merge: true }
-                );
+                await debouncedStatusUpdate({
+                  last_seen: serverTimestamp(),
+                  source: 'admin-pwa',
+                  status: 'subscribe_error',
+                  last_error: subErr.message || 'subscribe_failed',
+                });
                 return;
               }
               console.log('[MQTT Bridge] Subscribed OK:', granted?.map((g) => `${g.topic}:${g.qos}`).join(', '));
             });
 
-            await setDoc(
-              doc(db, 'system', 'bridge_status'),
-              {
-                last_seen: serverTimestamp(),
-                source: 'admin-pwa',
-                status: 'online',
-                subscribed_topics: ['devices/#'],
-                denied_topics: [],
-                last_error: null,
-                active_host: wsUrl,
-              },
-              { merge: true }
-            );
+            await debouncedStatusUpdate({
+              last_seen: serverTimestamp(),
+              source: 'admin-pwa',
+              status: 'online',
+              subscribed_topics: ['devices/#'],
+              denied_topics: [],
+              last_error: null,
+              active_host: wsUrl,
+            });
           } catch (e) {
             console.error('Bridge heartbeat write failed:', e);
           }
@@ -177,18 +214,22 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
             const channel = (parts[2] || '').toLowerCase();
             console.log(`[MQTT Bridge] Message: ${topic} -> ${deviceId}`);
 
-            // Update bridge status with last seen topic/device for live diagnostics.
-            await setDoc(
-              doc(db, 'system', 'bridge_status'),
-              {
-                last_seen: serverTimestamp(),
-                source: 'admin-pwa',
-                status: 'online',
-                last_topic: topic,
-                last_device_id: deviceId,
-              },
-              { merge: true }
-            );
+            // Only update bridge status every 30 seconds to prevent Firestore write limits
+            const now = Date.now();
+            if (now - lastStatusUpdate > STATUS_UPDATE_INTERVAL) {
+              await setDoc(
+                doc(db, 'system', 'bridge_status'),
+                {
+                  last_seen: serverTimestamp(),
+                  source: 'admin-pwa',
+                  status: 'online',
+                  last_topic: topic,
+                  last_device_id: deviceId,
+                },
+                { merge: true }
+              );
+              lastStatusUpdate = now;
+            }
 
             let payload: any = null;
             try {
@@ -229,17 +270,8 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
               return;
             }
 
-            await setDoc(
-              doc(db, 'system', 'bridge_status'),
-              {
-                last_seen: serverTimestamp(),
-                source: 'admin-pwa',
-                status: 'online',
-                last_registered_device_id: deviceId,
-                last_registered_at: serverTimestamp(),
-              },
-              { merge: true }
-            );
+            // Skip redundant bridge status updates - only update on new device registration
+            // This prevents excessive Firestore writes
 
             // Store telemetry snapshot
             await addDoc(collection(db, 'devices', deviceId, 'telemetry'), {
@@ -289,11 +321,11 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
     return () => {
       cancelled = true;
       if (unsub) unsub();
-      clientsRef.current.forEach((c) => {
-        try {
-          c.end(true);
-        } catch {}
-      });
+      if (statusTimeoutRef.current) {
+        clearTimeout(statusTimeoutRef.current);
+      }
+      // Don't close connections on unmount - let global registry manage them
+      // This prevents connection leaks when component re-renders
       clientsRef.current = [];
       setStatus('offline');
     };

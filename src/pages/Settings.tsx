@@ -251,6 +251,9 @@ export default function Settings() {
                               ...prev,
                               [d.id]: { ...prev[d.id], ohCap: Number(e.target.value) }
                             }))}
+                            min="1"
+                            max="99999"
+                            step="1"
                             className="w-full bg-[#1a2234] border border-white/5 rounded-xl py-2.5 px-4 text-sm text-cyan-400 font-bold focus:outline-none focus:ring-2 focus:ring-cyan-500/50 transition-all"
                           />
                         </div>
@@ -263,6 +266,9 @@ export default function Settings() {
                               ...prev,
                               [d.id]: { ...prev[d.id], ugCap: Number(e.target.value) }
                             }))}
+                            min="1"
+                            max="99999"
+                            step="1"
                             className="w-full bg-[#1a2234] border border-white/5 rounded-xl py-2.5 px-4 text-sm text-cyan-400 font-bold focus:outline-none focus:ring-2 focus:ring-cyan-500/50 transition-all"
                           />
                         </div>
