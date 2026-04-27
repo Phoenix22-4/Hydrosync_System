@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import mqtt from 'mqtt';
 
 export interface MQTTMessage {
@@ -36,41 +36,60 @@ export function useMQTT(
   const onMessageRef = useRef(options?.onMessage);
   const clientRef = useRef<mqtt.MqttClient | null>(null);
   const connectionKeyRef = useRef<string>('');
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     onMessageRef.current = options?.onMessage;
   }, [options?.onMessage]);
 
-  // Create stable connection key
-  const connectionKey = brokerUrl 
-    ? `${brokerUrl}_${options?.username || 'anon'}_${options?.clientId || 'default'}`
-    : '';
+  // Create stable connection key - memoized to prevent unnecessary reconnections
+  const connectionKey = useMemo(() => {
+    if (!brokerUrl) return '';
+    // Only include stable parameters in the key
+    const userPart = options?.username || 'anon';
+    return `${brokerUrl}_${userPart}`;
+  }, [brokerUrl, options?.username]);
 
   useEffect(() => {
-    if (!brokerUrl) {
+    // Skip if connection key hasn't changed
+    if (connectionKey === connectionKeyRef.current) {
+      return;
+    }
+
+    if (!brokerUrl || !connectionKey) {
       // Disconnect if no broker URL
-      if (clientRef.current) {
+      if (clientRef.current && connectionKeyRef.current) {
         console.log('MQTT: Disconnecting due to no broker URL');
-        clientRef.current.end(true);
+        // Only remove from registry if this component owns the connection
+        if (globalConnectionRegistry.get(connectionKeyRef.current) === clientRef.current) {
+          clientRef.current.end(true);
+          globalConnectionRegistry.delete(connectionKeyRef.current);
+        }
         clientRef.current = null;
-        globalConnectionRegistry.delete(connectionKeyRef.current);
-        setClient(null);
-        setIsConnected(false);
+        if (isMountedRef.current) {
+          setClient(null);
+          setIsConnected(false);
+        }
       }
+      connectionKeyRef.current = connectionKey;
       return;
     }
 
-    // Check if we already have a connection for this key
-    if (connectionKey === connectionKeyRef.current && clientRef.current) {
-      // Already connected to this broker, don't reconnect
-      return;
-    }
-
-    // Disconnect existing connection if different
-    if (clientRef.current && connectionKeyRef.current !== connectionKey) {
+    // Disconnect existing connection if different broker
+    if (clientRef.current && connectionKeyRef.current && connectionKeyRef.current !== connectionKey) {
       console.log('MQTT: Switching brokers, disconnecting old connection');
-      clientRef.current.end(true);
-      globalConnectionRegistry.delete(connectionKeyRef.current);
+      if (globalConnectionRegistry.get(connectionKeyRef.current) === clientRef.current) {
+        clientRef.current.end(true);
+        globalConnectionRegistry.delete(connectionKeyRef.current);
+      }
+      clientRef.current = null;
     }
 
     // Check global registry for existing connection
@@ -78,25 +97,30 @@ export function useMQTT(
     if (existingClient) {
       console.log('MQTT: Reusing existing connection for', connectionKey);
       clientRef.current = existingClient;
-      setClient(existingClient);
-      setIsConnected(existingClient.connected);
+      if (isMountedRef.current) {
+        setClient(existingClient);
+        setIsConnected(existingClient.connected);
+      }
       connectionKeyRef.current = connectionKey;
       return;
     }
 
     // Create new connection
     console.log('MQTT: Creating new connection to', brokerUrl);
-    setError(null);
+    if (isMountedRef.current) {
+      setError(null);
+    }
     
     try {
-      const clientId = options?.clientId || `hydrosync_${Date.now()}_${Math.random().toString(16).slice(2, 6)}`;
+      // Use stable clientId format
+      const clientId = options?.clientId || `hydrosync_${connectionKey.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 20)}_${Math.random().toString(16).slice(2, 6)}`;
       const mqttClient = mqtt.connect(brokerUrl, {
         username: options?.username,
         password: options?.password,
         clientId: clientId,
         clean: true,
-        reconnectPeriod: 10000, // Increase to 10 seconds to prevent rapid reconnection
-        connectTimeout: 30000,    // Increase to 30 seconds
+        reconnectPeriod: 15000, // Increased to 15 seconds
+        connectTimeout: 30000,  // 30 seconds
         keepalive: 60,
       });
 
@@ -104,12 +128,16 @@ export function useMQTT(
       globalConnectionRegistry.set(connectionKey, mqttClient);
       connectionKeyRef.current = connectionKey;
       clientRef.current = mqttClient;
-      setClient(mqttClient);
+      if (isMountedRef.current) {
+        setClient(mqttClient);
+      }
 
       mqttClient.on('connect', () => {
         console.log('MQTT Connected successfully');
-        setIsConnected(true);
-        setError(null);
+        if (isMountedRef.current) {
+          setIsConnected(true);
+          setError(null);
+        }
 
         // Resubscribe to all topics
         subscriptionsRef.current.forEach(topic => {
@@ -125,25 +153,31 @@ export function useMQTT(
 
       mqttClient.on('disconnect', () => {
         console.log('MQTT Disconnected');
-        setIsConnected(false);
+        if (isMountedRef.current) {
+          setIsConnected(false);
+        }
       });
 
       mqttClient.on('close', () => {
         console.log('MQTT Connection closed');
-        setIsConnected(false);
+        if (isMountedRef.current) {
+          setIsConnected(false);
+        }
       });
 
       mqttClient.on('error', (err) => {
         console.error('MQTT Error:', err.message);
         // Don't set error for connection issues - let reconnect handle it
-        if (!err.message.includes('connection') && !err.message.includes('timeout')) {
+        if (!err.message.includes('connection') && !err.message.includes('timeout') && isMountedRef.current) {
           setError(err.message);
         }
       });
 
       mqttClient.on('offline', () => {
         console.log('MQTT Client offline');
-        setIsConnected(false);
+        if (isMountedRef.current) {
+          setIsConnected(false);
+        }
       });
 
       mqttClient.on('message', (topic, message) => {
@@ -154,21 +188,23 @@ export function useMQTT(
 
     } catch (err) {
       console.error('MQTT connection failed:', err);
-      setError(err instanceof Error ? err.message : 'Connection failed');
+      if (isMountedRef.current) {
+        setError(err instanceof Error ? err.message : 'Connection failed');
+      }
     }
 
-    // Cleanup function
-    return () => {
-      // Don't disconnect on unmount - let the global registry manage it
-      // Only clean up if component is truly unmounting permanently
-    };
-  }, [brokerUrl, connectionKey]); // Only reconnect if broker URL or credentials change
+    // Cleanup function - don't disconnect, let registry manage it
+    return () => {};
+  }, [connectionKey]); // Only reconnect if connection key changes
 
   // Manual disconnect function for when user logs out or switches devices
   const disconnect = useCallback(() => {
     if (clientRef.current) {
       console.log('MQTT: Manual disconnect');
-      clientRef.current.end(true);
+      if (globalConnectionRegistry.get(connectionKeyRef.current) === clientRef.current) {
+        clientRef.current.end(true);
+        globalConnectionRegistry.delete(connectionKeyRef.current);
+      }
       globalConnectionRegistry.delete(connectionKeyRef.current);
       clientRef.current = null;
       setClient(null);

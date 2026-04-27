@@ -2,7 +2,7 @@
 // Key fix: DeviceBar's onAddDevice is wired to navigate('/add-device')
 // Device tabs are real <button type="button"> elements via DeviceBar component.
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   collection, query, where, onSnapshot, doc, updateDoc,
@@ -69,68 +69,70 @@ export default function Dashboard() {
   };
 
   // ── MQTT Connection ──────────────────────────────────
+  const mqttOptions = useMemo(() => ({
+    username: activeDevice?.mqtt_username,
+    password: activeDevice?.mqtt_password,
+    onMessage: (topic: string, message: Buffer) => {
+      try {
+        const payload = JSON.parse(message.toString());
+
+        // Security: Only accept messages for owned devices
+        const topicLc = topic.toLowerCase();
+        const isAuthorizedTopic = devices.some(device =>
+          topicLc.startsWith(`devices/${(device.mqtt_topic || device.device_id || device.id).toLowerCase()}/`) &&
+          device.assigned_to_user === user?.uid
+        );
+
+        if (!isAuthorizedTopic) {
+          console.warn('MQTT: Received message for unauthorized device/topic:', topic);
+          return;
+        }
+
+        // Find which device this message is for
+        const targetDevice = devices.find(device =>
+          topicLc.startsWith(`devices/${(device.mqtt_topic || device.device_id || device.id).toLowerCase()}/`)
+        );
+        if (!targetDevice) return;
+        const targetTopicId = targetDevice.mqtt_topic || targetDevice.device_id || targetDevice.id;
+
+        if (topicLc === `devices/${targetTopicId.toLowerCase()}/data`) {
+          // Update telemetry with live data
+          setTelemetry({
+            recorded_at: serverTimestamp() as any,
+            overhead_level: payload.overhead_level ?? telemetry?.overhead_level ?? 50,
+            underground_level: payload.underground_level ?? telemetry?.underground_level ?? 50,
+            pump_status: payload.pump_status ?? telemetry?.pump_status ?? false,
+            pump_current: parseFloat(payload.pump_current) || telemetry?.pump_current || 0,
+            system_status: payload.system_status || telemetry?.system_status || 'System Ready',
+          });
+
+          // Update device status in Firestore
+          if (activeDevice) {
+            updateDoc(doc(db, 'devices', activeDevice.id), {
+              last_seen: serverTimestamp(),
+              overhead_level: payload.overhead_level,
+              underground_level: payload.underground_level,
+              pump_status: payload.pump_status,
+              current_draw: parseFloat(payload.pump_current) || 0,
+              error_state: payload.system_status,
+            });
+          }
+        } else if (activeDevice?.device_id && topicLc === `devices/${mqttTopicDeviceId?.toLowerCase()}/alerts`) {
+          // Handle alerts
+          console.log('Alert received:', payload);
+          // Could add alert handling here
+        }
+      } catch (err) {
+        console.error('MQTT message parse error:', err);
+      }
+    },
+  }), [activeDevice, devices, user]);
+
   const { isConnected: mqttConnected, subscribe, publish: mqttPublish } = useMQTT(
     resolvedBroker ? (
       toWsBrokerUrl(resolvedBroker)
     ) : undefined,
-    {
-      username: activeDevice?.mqtt_username,
-      password: activeDevice?.mqtt_password,
-      onMessage: (topic: string, message: Buffer) => {
-        try {
-          const payload = JSON.parse(message.toString());
-
-          // Security: Only accept messages for owned devices
-          const topicLc = topic.toLowerCase();
-          const isAuthorizedTopic = devices.some(device =>
-            topicLc.startsWith(`devices/${(device.mqtt_topic || device.device_id || device.id).toLowerCase()}/`) &&
-            device.assigned_to_user === user?.uid
-          );
-
-          if (!isAuthorizedTopic) {
-            console.warn('MQTT: Received message for unauthorized device/topic:', topic);
-            return;
-          }
-
-          // Find which device this message is for
-          const targetDevice = devices.find(device =>
-            topicLc.startsWith(`devices/${(device.mqtt_topic || device.device_id || device.id).toLowerCase()}/`)
-          );
-          if (!targetDevice) return;
-          const targetTopicId = targetDevice.mqtt_topic || targetDevice.device_id || targetDevice.id;
-
-          if (topicLc === `devices/${targetTopicId.toLowerCase()}/data`) {
-            // Update telemetry with live data
-            setTelemetry({
-              recorded_at: serverTimestamp() as any,
-              overhead_level: payload.overhead_level ?? telemetry?.overhead_level ?? 50,
-              underground_level: payload.underground_level ?? telemetry?.underground_level ?? 50,
-              pump_status: payload.pump_status ?? telemetry?.pump_status ?? false,
-              pump_current: parseFloat(payload.pump_current) || telemetry?.pump_current || 0,
-              system_status: payload.system_status || telemetry?.system_status || 'System Ready',
-            });
-
-            // Update device status in Firestore
-            if (activeDevice) {
-              updateDoc(doc(db, 'devices', activeDevice.id), {
-                last_seen: serverTimestamp(),
-                overhead_level: payload.overhead_level,
-                underground_level: payload.underground_level,
-                pump_status: payload.pump_status,
-                current_draw: parseFloat(payload.pump_current) || 0,
-                error_state: payload.system_status,
-              });
-            }
-          } else if (activeDevice?.device_id && topicLc === `devices/${mqttTopicDeviceId?.toLowerCase()}/alerts`) {
-            // Handle alerts
-            console.log('Alert received:', payload);
-            // Could add alert handling here
-          }
-        } catch (err) {
-          console.error('MQTT message parse error:', err);
-        }
-      },
-    }
+    mqttOptions
   );
 
   // ── Fetch devices ────────────────────────────────────
