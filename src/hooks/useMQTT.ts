@@ -33,6 +33,7 @@ export function useMQTT(
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const subscriptionsRef = useRef<Set<string>>(new Set());
+  const subscribedTopicsRef = useRef<Set<string>>(new Set());
   const onMessageRef = useRef(options?.onMessage);
   const clientRef = useRef<mqtt.MqttClient | null>(null);
   const connectionKeyRef = useRef<string>('');
