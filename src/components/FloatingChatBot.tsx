@@ -88,7 +88,7 @@ export default function FloatingChatBot() {
             initial={{ opacity: 0, y: 20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            className="fixed bottom-24 right-6 w-[350px] h-[500px] bg-[#1e293b] border border-white/10 rounded-2xl shadow-2xl flex flex-col z-50 overflow-hidden"
+            className="absolute bottom-20 right-4 w-[calc(100vw-2rem)] max-w-[350px] h-[450px] bg-[#1e293b] border border-white/10 rounded-2xl shadow-2xl flex flex-col z-[100] overflow-hidden"
           >
             <div className="bg-gradient-to-r from-blue-600 to-cyan-500 p-4 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -166,7 +166,7 @@ export default function FloatingChatBot() {
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-br from-blue-600 to-cyan-500 rounded-full flex items-center justify-center shadow-lg shadow-cyan-500/30 z-50 text-white"
+        className="absolute bottom-4 right-4 w-14 h-14 bg-gradient-to-br from-blue-600 to-cyan-500 rounded-full flex items-center justify-center shadow-lg shadow-cyan-500/30 z-[101] text-white"
       >
         {isOpen ? <X className="w-6 h-6" /> : <MessageCircle className="w-6 h-6" />}
       </motion.button>

@@ -318,7 +318,7 @@ export default function Settings() {
             </p>
             
             <button
-              onClick={() => window.location.href = 'mailto:support@hydrosync.co.ke'}
+              onClick={() => window.location.href = 'mailto:visiontech072025@gmail.com'}
               className="w-full py-5 bg-cyan-500 hover:bg-cyan-400 text-slate-900 font-black text-xs uppercase tracking-[0.25em] rounded-2xl transition-all shadow-xl shadow-cyan-500/30 flex items-center justify-center gap-3 active:scale-[0.98]"
             >
               <Mail className="w-4 h-4" />

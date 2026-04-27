@@ -297,13 +297,13 @@ export default function History() {
                 </div>
 
                 {/* Right Side - Chart */}
-                <div className="h-[280px]">
+                <div className="min-h-[280px] h-[280px] relative">
                   {loading ? (
                     <div className="h-full flex items-center justify-center">
                       <Loader2 className="w-6 h-6 animate-spin text-cyan-500" />
                     </div>
                   ) : chartData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ResponsiveContainer width="100%" height="100%" minWidth={200} minHeight={280}>
                       <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                         <defs>
                           <linearGradient id="colorOH" x1="0" y1="0" x2="0" y2="1">
@@ -419,13 +419,13 @@ export default function History() {
                 </div>
 
                 {/* Right Side - Chart */}
-                <div className="h-[280px]">
+                <div className="min-h-[280px] h-[280px] relative">
                   {loading ? (
                     <div className="h-full flex items-center justify-center">
                       <Loader2 className="w-6 h-6 animate-spin text-orange-500" />
                     </div>
                   ) : chartData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ResponsiveContainer width="100%" height="100%" minWidth={200} minHeight={280}>
                       <LineChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
                         <XAxis 

@@ -210,14 +210,18 @@ service cloud.firestore {
 
     match /devices/{deviceId}/telemetry/{telemetryId} {
       allow read: if isAdmin() || (
-        isAuthenticated() && get(/databases/$(database)/documents/devices/$(deviceId)).data.assigned_to_user == request.auth.uid
+        isAuthenticated() && 
+        exists(/databases/$(database)/documents/devices/$(deviceId)) &&
+        get(/databases/$(database)/documents/devices/$(deviceId)).data.assigned_to_user == request.auth.uid
       );
       allow write: if isAdmin();
     }
 
     match /devices/{deviceId}/pump_events/{eventId} {
       allow read: if isAdmin() || (
-        isAuthenticated() && get(/databases/$(database)/documents/devices/$(deviceId)).data.assigned_to_user == request.auth.uid
+        isAuthenticated() && 
+        exists(/databases/$(database)/documents/devices/$(deviceId)) &&
+        get(/databases/$(database)/documents/devices/$(deviceId)).data.assigned_to_user == request.auth.uid
       );
       allow write: if isAdmin();
     }
@@ -225,20 +229,38 @@ service cloud.firestore {
 
 
     match /activity_log/{logId} {
-      allow read: if isAuthenticated() || isAdmin();
-      allow create: if isAuthenticated() || isAdmin();
+      // Users can read activity logs for their own devices or where they are the user
+      allow read: if isAuthenticated() && (
+        resource.data.user_id == request.auth.uid ||
+        resource.data.device_id in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.device_ids ||
+        isAdmin()
+      );
+      // Allow create for authenticated users and admins
+      allow create: if isAuthenticated() && (
+        request.resource.data.user_id == request.auth.uid || isAdmin()
+      );
       allow update, delete: if isSuperuser();
     }
 
     match /alerts/{alertId} {
+      // Users can read alerts where they are the recipient
       allow read: if isAdmin() || (
-        isAuthenticated() && resource.data.user_id == request.auth.uid
+        isAuthenticated() && (
+          resource.data.user_id == request.auth.uid ||
+          request.auth.uid in resource.data.recipients ||
+          resource.data.device_id in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.device_ids
+        )
       );
-      allow update: if isAuthenticated() && resource.data.user_id == request.auth.uid &&
-                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      // Users can update their own alerts (mark as read)
+      allow update: if isAuthenticated() && (
+        resource.data.user_id == request.auth.uid ||
+        request.auth.uid in resource.data.recipients
+      ) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'read_at']);
+      // Allow create for system alerts and admins
       allow create: if isAdmin() || (
         isAuthenticated() && 
-        request.resource.data.type in ['new_user', 'device_added', 'new_admin'] &&
+        request.resource.data.user_id == request.auth.uid &&
         request.resource.data.read == false
       );
       allow delete: if isSuperuser();
@@ -247,11 +269,13 @@ service cloud.firestore {
     match /commands/{commandId} {
       allow read: if isAdmin() || (
         isAuthenticated() &&
+        exists(/databases/$(database)/documents/devices/$(resource.data.device_id)) &&
         get(/databases/$(database)/documents/devices/$(resource.data.device_id)).data.assigned_to_user == request.auth.uid &&
         get(/databases/$(database)/documents/devices/$(resource.data.device_id)).data.status == 'active'
       );
       allow create: if isAdmin() || (
         isAuthenticated() &&
+        exists(/databases/$(database)/documents/devices/$(request.resource.data.device_id)) &&
         get(/databases/$(database)/documents/devices/$(request.resource.data.device_id)).data.assigned_to_user == request.auth.uid &&
         get(/databases/$(database)/documents/devices/$(request.resource.data.device_id)).data.status == 'active'
       );

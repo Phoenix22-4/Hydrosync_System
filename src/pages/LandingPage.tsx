@@ -924,7 +924,7 @@ export default function LandingPage() {
               </p>
               <div className="space-y-4">
                 <a 
-                  href="mailto:support@hydrosync.co.ke"
+                  href="mailto:visiontech072025@gmail.com"
                   className="flex items-center gap-4 p-5 bg-white/5 border border-white/10 rounded-2xl hover:bg-cyan-500 hover:text-slate-900 transition-all group"
                 >
                   <div className="w-12 h-12 bg-cyan-500/20 rounded-xl flex items-center justify-center text-cyan-400 group-hover:bg-slate-900/20 group-hover:text-slate-900 transition-colors">
@@ -932,7 +932,7 @@ export default function LandingPage() {
                   </div>
                   <div>
                     <span className="block text-[10px] font-bold text-slate-500 group-hover:text-slate-900/70 uppercase tracking-widest transition-colors">Direct Support Email</span>
-                    <span className="text-base font-black">support@hydrosync.co.ke</span>
+                    <span className="text-base font-black">visiontech072025@gmail.com</span>
                   </div>
                 </a>
                 <p className="text-center text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em]">
@@ -959,7 +959,11 @@ export default function LandingPage() {
         </div>
       </footer>
       {/* Floating ChatBot */}
-      <FloatingChatBot />
+      <div className="fixed bottom-0 right-0 w-full h-full pointer-events-none z-[100]">
+        <div className="absolute bottom-0 right-0 pointer-events-auto">
+          <FloatingChatBot />
+        </div>
+      </div>
     </div>
   );
 }

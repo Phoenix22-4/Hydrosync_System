@@ -819,7 +819,12 @@ export default function Dashboard() {
         )}
       </AnimatePresence>
 
-      <FloatingChatBot />
+      {/* Floating ChatBot Container */}
+      <div className="fixed bottom-0 right-0 w-full h-full pointer-events-none z-[100]">
+        <div className="absolute bottom-0 right-0 pointer-events-auto">
+          <FloatingChatBot />
+        </div>
+      </div>
     </div>
   );
 }
