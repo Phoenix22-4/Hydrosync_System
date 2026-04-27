@@ -85,6 +85,8 @@ export function useMQTT(
     // Disconnect existing connection if different broker
     if (clientRef.current && connectionKeyRef.current && connectionKeyRef.current !== connectionKey) {
       console.log('MQTT: Switching brokers, disconnecting old connection');
+      subscribedTopicsRef.current.clear();
+      subscriptionsRef.current.clear();
       if (globalConnectionRegistry.get(connectionKeyRef.current) === clientRef.current) {
         clientRef.current.end(true);
         globalConnectionRegistry.delete(connectionKeyRef.current);
@@ -153,6 +155,7 @@ export function useMQTT(
 
       mqttClient.on('disconnect', () => {
         console.log('MQTT Disconnected');
+        subscribedTopicsRef.current.clear();
         if (isMountedRef.current) {
           setIsConnected(false);
         }
@@ -160,6 +163,7 @@ export function useMQTT(
 
       mqttClient.on('close', () => {
         console.log('MQTT Connection closed');
+        subscribedTopicsRef.current.clear();
         if (isMountedRef.current) {
           setIsConnected(false);
         }
@@ -175,6 +179,7 @@ export function useMQTT(
 
       mqttClient.on('offline', () => {
         console.log('MQTT Client offline');
+        subscribedTopicsRef.current.clear();
         if (isMountedRef.current) {
           setIsConnected(false);
         }
@@ -210,18 +215,26 @@ export function useMQTT(
       setClient(null);
       setIsConnected(false);
       subscriptionsRef.current.clear();
+      subscribedTopicsRef.current.clear();
     }
   }, []);
 
   const subscribe = useCallback((topic: string, options?: mqtt.IClientSubscribeOptions) => {
+    // Skip if already subscribed to this topic
+    if (subscribedTopicsRef.current.has(topic)) {
+      return;
+    }
+    
     // Store topic for reconnection
     subscriptionsRef.current.add(topic);
+    subscribedTopicsRef.current.add(topic);
     
     const currentClient = clientRef.current;
     if (currentClient && currentClient.connected) {
       currentClient.subscribe(topic, options, (err) => {
         if (err) {
           console.error('MQTT subscribe error:', err);
+          subscribedTopicsRef.current.delete(topic);
         } else {
           console.log('MQTT subscribed to:', topic);
         }
@@ -231,6 +244,7 @@ export function useMQTT(
 
   const unsubscribe = useCallback((topic: string) => {
     subscriptionsRef.current.delete(topic);
+    subscribedTopicsRef.current.delete(topic);
     
     const currentClient = clientRef.current;
     if (currentClient && currentClient.connected) {
