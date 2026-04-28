@@ -12,9 +12,7 @@ coverage/
 android/.idea/
 gradle-8.14.3-all.zip
 
-# Firmware folder tracked in Git but excluded from web app builds & hosting
-# Keep firmware/ in Git for version control, but don't deploy to web hosting
-firmware/
-!firmware/
-!firmware/**/*.ino
-!firmware/**/*.h
+# Firmware folder - tracked in Git for version control
+# but excluded from web app builds & Netlify hosting via netlify.toml
+# Do not add firmware/ here - it needs to be in Git
+# Instead, use [build] ignore = "firmware/" in netlify.toml

@@ -19,6 +19,8 @@ export interface UseMQTTResult {
 
 // Global connection registry to prevent duplicate connections
 const globalConnectionRegistry = new Map<string, mqtt.MqttClient>();
+// Track which connections have already logged to prevent spam
+const loggedConnections = new Set<string>();
 
 export function useMQTT(
   brokerUrl?: string,
@@ -136,7 +138,11 @@ export function useMQTT(
       }
 
       mqttClient.on('connect', () => {
-        console.log('MQTT Connected successfully');
+        // Only log once per connection key to prevent spam
+        if (!loggedConnections.has(connectionKey)) {
+          console.log('MQTT Connected successfully');
+          loggedConnections.add(connectionKey);
+        }
         if (isMountedRef.current) {
           setIsConnected(true);
           setError(null);
@@ -148,14 +154,23 @@ export function useMQTT(
             if (err) {
               console.error('MQTT subscribe error:', err);
             } else {
-              console.log('MQTT subscribed to:', topic);
+              // Only log subscription once per topic
+              const subKey = `${connectionKey}:${topic}`;
+              if (!loggedConnections.has(subKey)) {
+                console.log('MQTT subscribed to:', topic);
+                loggedConnections.add(subKey);
+              }
             }
           });
         });
       });
 
       mqttClient.on('disconnect', () => {
-        console.log('MQTT Disconnected');
+        // Remove from logged connections on disconnect so reconnect logs again
+        loggedConnections.delete(connectionKey);
+        loggedConnections.forEach(key => {
+          if (key.startsWith(connectionKey + ':')) loggedConnections.delete(key);
+        });
         subscribedTopicsRef.current.clear();
         if (isMountedRef.current) {
           setIsConnected(false);
@@ -163,7 +178,11 @@ export function useMQTT(
       });
 
       mqttClient.on('close', () => {
-        console.log('MQTT Connection closed');
+        // Remove from logged connections on close
+        loggedConnections.delete(connectionKey);
+        loggedConnections.forEach(key => {
+          if (key.startsWith(connectionKey + ':')) loggedConnections.delete(key);
+        });
         subscribedTopicsRef.current.clear();
         if (isMountedRef.current) {
           setIsConnected(false);
