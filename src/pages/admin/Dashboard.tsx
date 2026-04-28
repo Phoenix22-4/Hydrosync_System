@@ -91,10 +91,23 @@ export default function AdminDashboard() {
     };
   }, [user]);
 
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   return (
-    <div className="flex min-h-screen bg-[#0a0f1e]">
-      {/* Sidebar */}
-      <aside className="hidden lg:flex w-64 bg-[#111827] border-r border-white/5 flex-col sticky top-0 h-screen shrink-0">
+    <div className="flex min-h-[100dvh] bg-[#0a0f1e] overflow-x-hidden">
+      {/* Mobile Menu Overlay */}
+      {mobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Sidebar - Desktop always visible, Mobile conditional */}
+      <aside className={cn(
+        "w-64 bg-[#111827] border-r border-white/5 flex-col fixed lg:sticky top-0 h-[100dvh] shrink-0 z-50 transition-transform duration-300",
+        mobileMenuOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+      )}>
         <div className="p-6 border-b border-white/5 flex items-center gap-3">
           <div className="w-9 h-9 bg-gradient-to-br from-blue-600 to-cyan-400 rounded-lg flex items-center justify-center shadow-lg shadow-cyan-500/20">
             <img src="/icon.png" alt="HydroSync Icon" className="w-5 h-5 text-white" />
@@ -107,17 +120,17 @@ export default function AdminDashboard() {
 
         <nav className="flex-1 p-4 space-y-1">
           <div className="px-4 py-3 text-[10px] font-bold text-slate-600 uppercase tracking-widest">Main</div>
-          <NavLink to="/admin" icon={<LayoutDashboard className="w-4 h-4" />} label="Dashboard" active />
-          <NavLink to="/admin/devices" icon={<Smartphone className="w-4 h-4" />} label="Device Registration" />
-          <NavLink to="/admin/users" icon={<Users className="w-4 h-4" />} label="Users & Devices" />
+          <NavLink to="/admin" icon={<LayoutDashboard className="w-4 h-4" />} label="Dashboard" active onClick={() => setMobileMenuOpen(false)} />
+          <NavLink to="/admin/devices" icon={<Smartphone className="w-4 h-4" />} label="Device Registration" onClick={() => setMobileMenuOpen(false)} />
+          <NavLink to="/admin/users" icon={<Users className="w-4 h-4" />} label="Users & Devices" onClick={() => setMobileMenuOpen(false)} />
           
           <div className="px-4 py-3 mt-4 text-[10px] font-bold text-slate-600 uppercase tracking-widest">Analytics</div>
-          <NavLink to="/admin/charts" icon={<BarChart3 className="w-4 h-4" />} label="Charts & Data" />
+          <NavLink to="/admin/charts" icon={<BarChart3 className="w-4 h-4" />} label="Charts & Data" onClick={() => setMobileMenuOpen(false)} />
           
           <div className="px-4 py-3 mt-4 text-[10px] font-bold text-slate-600 uppercase tracking-widest">System</div>
-          <NavLink to="/admin/log" icon={<ClipboardList className="w-4 h-4" />} label="Activity Log" />
-          <NavLink to="/admin/alerts" icon={<Bell className="w-4 h-4" />} label="Fleet Alerts" badge={stats.alerts} />
-          <NavLink to="/admin/settings" icon={<Settings className="w-4 h-4" />} label="Settings" />
+          <NavLink to="/admin/log" icon={<ClipboardList className="w-4 h-4" />} label="Activity Log" onClick={() => setMobileMenuOpen(false)} />
+          <NavLink to="/admin/alerts" icon={<Bell className="w-4 h-4" />} label="Fleet Alerts" badge={stats.alerts} onClick={() => setMobileMenuOpen(false)} />
+          <NavLink to="/admin/settings" icon={<Settings className="w-4 h-4" />} label="Settings" onClick={() => setMobileMenuOpen(false)} />
         </nav>
 
         <div className="p-4 border-t border-white/5">
@@ -131,7 +144,18 @@ export default function AdminDashboard() {
       {/* Main Content */}
       <main className="flex-1 flex flex-col">
         <header className="h-16 bg-[#111827] border-b border-white/5 px-4 md:px-8 flex items-center justify-between sticky top-0 z-20">
-          <h2 className="text-lg font-bold text-white">Dashboard Overview</h2>
+          <div className="flex items-center gap-3">
+            {/* Mobile Menu Button */}
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="lg:hidden p-2 hover:bg-white/5 rounded-lg text-slate-400 hover:text-white transition-colors"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            <h2 className="text-lg font-bold text-white">Dashboard Overview</h2>
+          </div>
           <div className="flex items-center gap-4">
             {/* Documentation Link */}
             <Link
@@ -266,12 +290,16 @@ export default function AdminDashboard() {
   );
 }
 
-function NavLink({ to, icon, label, active, badge }: { to: string; icon: React.ReactNode; label: string; active?: boolean; badge?: number }) {
+function NavLink({ to, icon, label, active, badge, onClick }: { to: string; icon: React.ReactNode; label: string; active?: boolean; badge?: number; onClick?: () => void }) {
+  const navigate = useNavigate();
   return (
-    <Link
-      to={to}
+    <button
+      onClick={() => {
+        navigate(to);
+        onClick?.();
+      }}
       className={cn(
-        "flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all group",
+        "w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all group text-left",
         active ? "bg-cyan-500/10 text-cyan-400" : "text-slate-500 hover:bg-white/5 hover:text-slate-200"
       )}
     >
@@ -280,7 +308,7 @@ function NavLink({ to, icon, label, active, badge }: { to: string; icon: React.R
       {badge !== undefined && badge > 0 && (
         <span className="px-1.5 py-0.5 bg-red-500 text-white text-[9px] font-bold rounded-full">{badge}</span>
       )}
-    </Link>
+    </button>
   );
 }
 

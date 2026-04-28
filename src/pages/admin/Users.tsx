@@ -33,6 +33,7 @@ export default function AdminUsers() {
   const [newUserDevice, setNewUserDevice] = useState('');
   const [isAddingUser, setIsAddingUser] = useState(false);
   const [addUserError, setAddUserError] = useState<string | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const { user, isSuperuser } = useAuth();
   const navigate = useNavigate();
@@ -203,9 +204,20 @@ export default function AdminUsers() {
   });
 
   return (
-    <div className="flex min-h-screen bg-[#0a0f1e]">
-      {/* Sidebar (Simplified) */}
-      <aside className="hidden lg:flex w-64 bg-[#111827] border-r border-white/5 flex-col sticky top-0 h-screen shrink-0">
+    <div className="flex min-h-[100dvh] bg-[#0a0f1e] overflow-x-hidden">
+      {/* Mobile Menu Overlay */}
+      {mobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside className={cn(
+        "w-64 bg-[#111827] border-r border-white/5 flex-col fixed lg:sticky top-0 h-[100dvh] shrink-0 z-50 transition-transform duration-300",
+        mobileMenuOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+      )}>
         <div className="p-6 border-b border-white/5 flex items-center gap-3">
           <div className="w-9 h-9 bg-gradient-to-br from-blue-600 to-cyan-400 rounded-lg flex items-center justify-center shadow-lg shadow-cyan-500/20">
             <Users className="w-5 h-5 text-white" />
@@ -216,16 +228,25 @@ export default function AdminUsers() {
           </div>
         </div>
         <nav className="p-4 space-y-1">
-          <Link to="/admin" className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium text-slate-500 hover:bg-white/5 hover:text-slate-200">Dashboard</Link>
-          <Link to="/admin/devices" className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium text-slate-500 hover:bg-white/5 hover:text-slate-200">Device Registration</Link>
-          <Link to="/admin/users" className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium bg-cyan-500/10 text-cyan-400">Users & Devices</Link>
-          <Link to="/admin/settings" className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium text-slate-500 hover:bg-white/5 hover:text-slate-200">Settings</Link>
+          <button onClick={() => { navigate('/admin'); setMobileMenuOpen(false); }} className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium text-slate-500 hover:bg-white/5 hover:text-slate-200 text-left">Dashboard</button>
+          <button onClick={() => { navigate('/admin/devices'); setMobileMenuOpen(false); }} className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium text-slate-500 hover:bg-white/5 hover:text-slate-200 text-left">Device Registration</button>
+          <button onClick={() => { navigate('/admin/users'); setMobileMenuOpen(false); }} className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium bg-cyan-500/10 text-cyan-400 text-left">Users & Devices</button>
+          <button onClick={() => { navigate('/admin/settings'); setMobileMenuOpen(false); }} className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium text-slate-500 hover:bg-white/5 hover:text-slate-200 text-left">Settings</button>
         </nav>
       </aside>
 
       <main className="flex-1 flex flex-col">
         <header className="h-16 bg-[#111827] border-b border-white/5 px-4 md:px-8 flex items-center justify-between sticky top-0 z-20">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            {/* Mobile Menu Button */}
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="lg:hidden p-2 hover:bg-white/5 rounded-lg text-slate-400 hover:text-white transition-colors"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
             <button 
               onClick={() => navigate('/admin')}
               className="p-2 hover:bg-white/5 rounded-lg text-slate-500 hover:text-white transition-colors group"

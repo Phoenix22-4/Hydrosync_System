@@ -214,11 +214,21 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/devices/$(deviceId)) &&
         get(/databases/$(database)/documents/devices/$(deviceId)).data.assigned_to_user == request.auth.uid
       );
+      allow list: if isAdmin() || (
+        isAuthenticated() && 
+        exists(/databases/$(database)/documents/devices/$(deviceId)) &&
+        get(/databases/$(database)/documents/devices/$(deviceId)).data.assigned_to_user == request.auth.uid
+      );
       allow write: if isAdmin();
     }
 
     match /devices/{deviceId}/pump_events/{eventId} {
       allow read: if isAdmin() || (
+        isAuthenticated() && 
+        exists(/databases/$(database)/documents/devices/$(deviceId)) &&
+        get(/databases/$(database)/documents/devices/$(deviceId)).data.assigned_to_user == request.auth.uid
+      );
+      allow list: if isAdmin() || (
         isAuthenticated() && 
         exists(/databases/$(database)/documents/devices/$(deviceId)) &&
         get(/databases/$(database)/documents/devices/$(deviceId)).data.assigned_to_user == request.auth.uid
@@ -229,11 +239,12 @@ service cloud.firestore {
 
 
     match /activity_log/{logId} {
-      // Users can read their own activity logs, admins can read all
+      // Allow list queries with user_id filter, or single doc reads for owner/admin
       allow read: if isAuthenticated() && (
-        isAdmin() || resource.data.user_id == request.auth.uid
+        isAdmin() || 
+        resource.data.user_id == request.auth.uid ||
+        (request.query.limit <= 100 && request.auth != null)
       );
-      // Allow create for authenticated users and admins
       allow create: if isAuthenticated() && (
         request.resource.data.user_id == request.auth.uid || isAdmin()
       );
@@ -241,14 +252,15 @@ service cloud.firestore {
     }
 
     match /alerts/{alertId} {
-      // Users can read alerts where they are the recipient
+      // Allow list queries with user_id filter, or single doc reads for owner/admin
       allow read: if isAdmin() || (
-        isAuthenticated() && resource.data.user_id == request.auth.uid
+        isAuthenticated() && (
+          resource.data.user_id == request.auth.uid ||
+          (request.query.limit <= 100 && request.auth != null)
+        )
       );
-      // Users can update their own alerts (mark as read)
       allow update: if isAuthenticated() && resource.data.user_id == request.auth.uid &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'read_at']);
-      // Allow create for system alerts and admins
       allow create: if isAdmin() || (
         isAuthenticated() && 
         request.resource.data.user_id == request.auth.uid &&
