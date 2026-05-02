@@ -353,7 +353,7 @@ export default function Dashboard() {
       if (mqttConnected) {
         // Use the persistent MQTT connection
         const commandTopic = `devices/${mqttTopicDeviceId}/commands`;
-        mqttPublish(commandTopic, cmd);
+        mqttPublish(commandTopic, JSON.stringify({ command: cmd }));
       } else if (resolvedBroker) {
         // Fallback: create temporary connection
         try {
@@ -363,7 +363,7 @@ export default function Dashboard() {
             password: activeDevice.mqtt_password,
             clientId: `hydrosync_web_${Math.random().toString(16).slice(2, 8)}`,
           });
-          client.on('connect', () => { client.publish(`devices/${mqttTopicDeviceId}/commands`, cmd); client.end(); });
+          client.on('connect', () => { client.publish(`devices/${mqttTopicDeviceId}/commands`, JSON.stringify({ command: cmd })); client.end(); });
           client.on('error',   (err) => { console.error('MQTT:', err); client.end(); });
         } catch (err) {
           console.error('MQTT connect failed:', err);
