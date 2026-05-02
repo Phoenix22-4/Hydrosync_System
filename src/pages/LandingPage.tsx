@@ -790,13 +790,13 @@ export default function LandingPage() {
                     New Installation
                   </h4>
                   <p className="text-slate-400 text-sm mb-4">Download the latest APK to install HydroSync on your Android smartphone.</p>
-                  <a 
-                    href="/HydroSync-App.apk"
+                  <a
+                    href="https://github.com/Phoenix22-4/Hydrosync_System/releases/latest/download/HydroSync-App.apk"
                     download
                     className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white font-bold rounded-xl transition-all flex items-center gap-2 inline-block"
                   >
                     <Zap className="w-4 h-4" />
-                    Download APK (v1.0.0)
+                    Download APK (Latest)
                   </a>
                 </div>
               </div>
