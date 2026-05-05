@@ -42,6 +42,9 @@ export default function Dashboard() {
   const [fallbackBroker, setFallbackBroker] = useState<string | null>(null);
   // Track last telemetry update timestamp for real-time sync
   const lastTelemetryUpdateRef = useRef<number>(Date.now());
+  // 5-second heartbeat: tracks whether the IoT device is actively sending data
+  const heartbeatTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [deviceHeartbeatAlive, setDeviceHeartbeatAlive] = useState(false);
 
   useEffect(() => {
     const handleOnline = () => setIsInternetOffline(false);
@@ -101,6 +104,15 @@ export default function Dashboard() {
           // Update telemetry with live data - mark timestamp for real-time tracking
           const now = Date.now();
           lastTelemetryUpdateRef.current = now;
+          
+          // Reset 5-second heartbeat timer — device is alive
+          if (heartbeatTimerRef.current) clearTimeout(heartbeatTimerRef.current);
+          setDeviceHeartbeatAlive(true);
+          heartbeatTimerRef.current = setTimeout(() => {
+            // 5 seconds elapsed with no data — device is offline
+            setDeviceHeartbeatAlive(false);
+          }, 5000);
+          
           setTelemetry({
             recorded_at: { seconds: Math.floor(now / 1000), nanoseconds: (now % 1000) * 1000000 } as any,
             overhead_level: payload.overhead_level ?? telemetry?.overhead_level ?? 50,
@@ -252,10 +264,18 @@ export default function Dashboard() {
     });
   }, [activeDevice]);
 
+  // ── Cleanup heartbeat timer on unmount ────────────────
+  useEffect(() => {
+    return () => {
+      if (heartbeatTimerRef.current) clearTimeout(heartbeatTimerRef.current);
+    };
+  }, []);
+
   // ── Offline alert trigger ─────────────────────────────
   useEffect(() => {
     if (!telemetry || !activeDevice || !user) return;
-    const offline = isDeviceOffline(telemetry);
+    // Use heartbeat status for real-time offline detection
+    const offline = !deviceHeartbeatAlive;
     setIsOffline(offline);
 
     if (offline) {
@@ -476,6 +496,7 @@ export default function Dashboard() {
             <span className="text-[10px] font-bold uppercase tracking-widest">
               {isOffline ? 'Offline' : 'Live'}
             </span>
+            {!isOffline && <span className="text-[8px] text-slate-500 ml-1">5s heartbeat</span>}
           </div>
         </div>
       </header>
@@ -550,9 +571,9 @@ export default function Dashboard() {
             </div>
 
             <TankScene
-              ohLevel={telemetry?.overhead_level ?? 0}
-              ugLevel={telemetry?.underground_level ?? 0}
-              pumpOn={telemetry?.pump_status ?? false}
+              ohLevel={isOffline ? 0 : (telemetry?.overhead_level ?? 0)}
+              ugLevel={isOffline ? 0 : (telemetry?.underground_level ?? 0)}
+              pumpOn={isOffline ? false : (telemetry?.pump_status ?? false)}
               ohCap={activeDevice?.ohCap}
               ugCap={activeDevice?.ugCap}
             />
@@ -561,13 +582,14 @@ export default function Dashboard() {
               {/* Overhead */}
               <div className="pr-4 text-center">
                 <div className={cn('text-2xl font-bold leading-none mb-1',
+                  isOffline ? 'text-slate-600' :
                   (telemetry?.overhead_level ?? 0) >= 50 ? 'text-green-500'
                   : (telemetry?.overhead_level ?? 0) >= 20 ? 'text-orange-500' : 'text-red-500'
                 )}>
-                  {Number(telemetry?.overhead_level ?? 0).toFixed(0)}%
+                  {isOffline ? '--' : `${Number(telemetry?.overhead_level ?? 0).toFixed(0)}%`}
                 </div>
                 <div className="text-xs font-semibold text-cyan-400">
-                  {activeDevice?.ohCap
+                  {isOffline ? '-- L' : activeDevice?.ohCap
                     ? `${Math.round((telemetry?.overhead_level ?? 0) / 100 * activeDevice.ohCap).toLocaleString()} L`
                     : '— L'}
                 </div>
@@ -576,13 +598,14 @@ export default function Dashboard() {
               {/* Underground */}
               <div className="pl-4 text-center">
                 <div className={cn('text-2xl font-bold leading-none mb-1',
+                  isOffline ? 'text-slate-600' :
                   (telemetry?.underground_level ?? 0) >= 50 ? 'text-green-500'
                   : (telemetry?.underground_level ?? 0) >= 20 ? 'text-orange-500' : 'text-red-500'
                 )}>
-                  {Number(telemetry?.underground_level ?? 0).toFixed(0)}%
+                  {isOffline ? '--' : `${Number(telemetry?.underground_level ?? 0).toFixed(0)}%`}
                 </div>
                 <div className="text-xs font-semibold text-cyan-400">
-                  {activeDevice?.ugCap
+                  {isOffline ? '-- L' : activeDevice?.ugCap
                     ? `${Math.round((telemetry?.underground_level ?? 0) / 100 * activeDevice.ugCap).toLocaleString()} L`
                     : '— L'}
                 </div>
@@ -601,13 +624,13 @@ export default function Dashboard() {
             )}>⚙</div>
             <div className="flex-1 min-w-0">
               <div className={cn('text-sm font-bold uppercase tracking-wide',
-                telemetry?.pump_status ? 'text-green-500' : 'text-slate-500'
+                isOffline ? 'text-slate-600' : telemetry?.pump_status ? 'text-green-500' : 'text-slate-500'
               )}>
-                {telemetry?.pump_status ? 'Pump Running' : 'Pump Off'}
+                {isOffline ? 'Device Offline' : telemetry?.pump_status ? 'Pump Running' : 'Pump Off'}
               </div>
               <div className="text-xs text-slate-400 mt-0.5 flex flex-wrap gap-x-3">
-                <span>Current: <span className="text-cyan-400 font-semibold">{Number(telemetry?.pump_current ?? 0).toFixed(2)} A</span></span>
-                <span>Power: <span className="text-cyan-400 font-semibold">{(Number(telemetry?.pump_current ?? 0) * 240 / 1000).toFixed(2)} kW</span></span>
+                <span>Current: <span className="text-cyan-400 font-semibold">{isOffline ? '--' : `${Number(telemetry?.pump_current ?? 0).toFixed(2)} A`}</span></span>
+                <span>Power: <span className="text-cyan-400 font-semibold">{isOffline ? '--' : `${(Number(telemetry?.pump_current ?? 0) * 240 / 1000).toFixed(2)} kW`}</span></span>
               </div>
             </div>
           </div>

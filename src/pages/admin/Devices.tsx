@@ -33,6 +33,9 @@ export default function AdminDevices() {
   
   // Track last update timestamps for real-time sync per device
   const lastUpdateRef = useRef<Record<string, number>>({});
+  // 5-second heartbeat timers per device
+  const heartbeatTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const [heartbeatAliveMap, setHeartbeatAliveMap] = useState<Record<string, boolean>>({});
 
   // ── Fetch MQTT Hosts for real-time connection ─────────
   useEffect(() => {
@@ -76,6 +79,13 @@ export default function AdminDevices() {
       if (topicLc.includes('/data')) {
         const now = Date.now();
         lastUpdateRef.current[deviceId] = now;
+        
+        // Reset 5-second heartbeat timer for this device
+        if (heartbeatTimersRef.current[deviceId]) clearTimeout(heartbeatTimersRef.current[deviceId]);
+        setHeartbeatAliveMap(prev => ({ ...prev, [deviceId]: true }));
+        heartbeatTimersRef.current[deviceId] = setTimeout(() => {
+          setHeartbeatAliveMap(prev => ({ ...prev, [deviceId]: false }));
+        }, 5000);
         
         setTelemetryMap(prev => ({
           ...prev,
@@ -152,6 +162,13 @@ export default function AdminDevices() {
     });
     return () => unsubscribe();
   }, [user]);
+
+  // ── Cleanup heartbeat timers ──────────────────────────
+  useEffect(() => {
+    return () => {
+      Object.values(heartbeatTimersRef.current).forEach(t => clearTimeout(t));
+    };
+  }, []);
 
   // ── MQTT Subscription for all devices ─────────────────
   useEffect(() => {
@@ -332,7 +349,9 @@ export default function AdminDevices() {
                       const tel = telemetryMap[d.id];
                       const lastSeenSource = tel?.recorded_at || d.last_seen || null;
                       const statusTelemetry = lastSeenSource ? ({ recorded_at: lastSeenSource } as Telemetry) : null;
-                      const offline = isDeviceOffline(statusTelemetry);
+                      // Use heartbeat for real-time offline detection (5s timeout)
+                      const heartbeatAlive = heartbeatAliveMap[d.id] ?? false;
+                      const offline = !heartbeatAlive;
                       
                       return (
                         <tr key={d.id} className="hover:bg-white/[0.02] transition-colors group">
