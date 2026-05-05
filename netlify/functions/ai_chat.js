@@ -1,5 +1,3 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-
 export const handler = async (event) => {
   // CORS headers for all responses
   const headers = {
@@ -53,18 +51,33 @@ export const handler = async (event) => {
   }
 
   try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-1.5-flash',
-      systemInstruction: `You are HydroSync AI, a smart assistant for the HydroSync water management application. Use the following documentation to answer questions accurately and in a friendly, conversational tone. Do not copy-paste the documentation verbatim. If the user asks something not in the documentation, answer using your general knowledge but remain focused on water system management.
-
-USER DOCUMENTATION:
-${documentation || 'No extra documentation provided.'}`,
+    // Use REST API directly — no SDK dependency needed
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: message }] }],
+        systemInstruction: {
+          parts: [{ text: `You are HydroSync AI, a smart assistant for the HydroSync water management application. Use the following documentation to answer questions accurately and in a friendly, conversational tone. Do not copy-paste the documentation verbatim. If the user asks something not in the documentation, answer using your general knowledge but remain focused on water system management.\n\nUSER DOCUMENTATION:\n${documentation || 'No extra documentation provided.'}` }]
+        },
+        generationConfig: { temperature: 0.7 },
+      }),
     });
 
-    const result = await model.generateContent(message);
-    const response = await result.response;
-    const resultText = response.text();
+    if (!response.ok) {
+      const errData = await response.text();
+      console.error('Gemini API error:', response.status, errData);
+      return {
+        statusCode: response.status,
+        headers,
+        body: JSON.stringify({ error: `Gemini API error: ${errData}` }),
+      };
+    }
+
+    const data = await response.json();
+    const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     
     return {
       statusCode: 200,

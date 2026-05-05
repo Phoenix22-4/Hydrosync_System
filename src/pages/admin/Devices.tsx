@@ -350,8 +350,9 @@ export default function AdminDevices() {
                       const lastSeenSource = tel?.recorded_at || d.last_seen || null;
                       const statusTelemetry = lastSeenSource ? ({ recorded_at: lastSeenSource } as Telemetry) : null;
                       // Use heartbeat for real-time offline detection (5s timeout)
-                      const heartbeatAlive = heartbeatAliveMap[d.id] ?? false;
-                      const offline = !heartbeatAlive;
+                      // undefined = haven't received MQTT data yet → fall back to Firestore check
+                      const heartbeatAlive = heartbeatAliveMap[d.id];
+                      const offline = heartbeatAlive === undefined ? isDeviceOffline(statusTelemetry) : !heartbeatAlive;
                       
                       return (
                         <tr key={d.id} className="hover:bg-white/[0.02] transition-colors group">

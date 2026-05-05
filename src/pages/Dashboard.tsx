@@ -44,7 +44,7 @@ export default function Dashboard() {
   const lastTelemetryUpdateRef = useRef<number>(Date.now());
   // 5-second heartbeat: tracks whether the IoT device is actively sending data
   const heartbeatTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [deviceHeartbeatAlive, setDeviceHeartbeatAlive] = useState(false);
+  const [deviceHeartbeatAlive, setDeviceHeartbeatAlive] = useState<boolean | null>(null); // null = waiting for first data
 
   useEffect(() => {
     const handleOnline = () => setIsInternetOffline(false);
@@ -275,7 +275,8 @@ export default function Dashboard() {
   useEffect(() => {
     if (!telemetry || !activeDevice || !user) return;
     // Use heartbeat status for real-time offline detection
-    const offline = !deviceHeartbeatAlive;
+    // null = haven't received any data yet → use Firestore fallback
+    const offline = deviceHeartbeatAlive === null ? isDeviceOffline(telemetry) : !deviceHeartbeatAlive;
     setIsOffline(offline);
 
     if (offline) {
