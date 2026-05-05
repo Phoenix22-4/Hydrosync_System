@@ -1,12 +1,23 @@
 import { GoogleGenAI } from '@google/genai';
 
 export const handler = async (event) => {
+  // CORS headers for all responses
+  const headers = {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  };
+
+  // Handle CORS preflight
+  if (event.httpMethod === 'OPTIONS') {
+    return { statusCode: 204, headers, body: '' };
+  }
+
   if (event.httpMethod !== 'POST') {
     return {
       statusCode: 405,
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({ error: 'Method not allowed' }),
     };
   }
@@ -17,9 +28,7 @@ export const handler = async (event) => {
   } catch (error) {
     return {
       statusCode: 400,
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({ error: 'Invalid JSON body' }),
     };
   }
@@ -28,28 +37,27 @@ export const handler = async (event) => {
   if (!message || typeof message !== 'string') {
     return {
       statusCode: 400,
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({ error: 'Missing required field: message' }),
     };
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
+    console.error('GEMINI_API_KEY not found in environment');
     return {
       statusCode: 500,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ error: 'Server configuration missing Gemini API key' }),
+      headers,
+      body: JSON.stringify({ error: 'Server configuration missing Gemini API key. Please set GEMINI_API_KEY in Netlify environment variables.' }),
     };
   }
 
   try {
     const ai = new GoogleGenAI({ apiKey });
+    
+    // Use correct model name - gemini-1.5-flash or gemini-pro
     const response = await ai.models.generateContent({
-      model: 'gemini-3.1-flash-preview',
+      model: 'gemini-1.5-flash',
       contents: [
         {
           role: 'user',
@@ -65,21 +73,20 @@ ${documentation || 'No extra documentation provided.'}`,
       },
     });
 
+    // Extract text from response
+    const resultText = response.text || (response.candidates?.[0]?.content?.parts?.[0]?.text) || '';
+    
     return {
       statusCode: 200,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ result: response.text || '' }),
+      headers,
+      body: JSON.stringify({ result: resultText }),
     };
   } catch (error) {
-    console.error('AI function error:', error);
+    console.error('AI function error:', error.message || error);
     return {
       statusCode: 500,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ error: 'Failed to generate AI response' }),
+      headers,
+      body: JSON.stringify({ error: `Failed to generate AI response: ${error.message || 'Unknown error'}` }),
     };
   }
 };
