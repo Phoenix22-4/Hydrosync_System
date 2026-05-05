@@ -2,7 +2,7 @@
 // Key fix: DeviceBar's onAddDevice is wired to navigate('/add-device')
 // Device tabs are real <button type="button"> elements via DeviceBar component.
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   collection, query, where, onSnapshot, doc, updateDoc,
