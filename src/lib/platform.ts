@@ -31,7 +31,7 @@ export function shouldSkipLandingPage(): boolean {
 
 // Get the base URL for API calls (Netlify functions)
 // In native apps, relative URLs don't work — we need the full Netlify URL
-const NETLIFY_SITE_URL = 'https://hydrosync.netlify.app';
+const NETLIFY_SITE_URL = 'https://vantixa2228.netlify.app';
 
 export function getApiBaseUrl(): string {
   if (isNativeApp()) {
