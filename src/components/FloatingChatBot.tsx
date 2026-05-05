@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Send, MessageCircle, X, Loader2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { USER_DOCUMENTATION } from '../constants/docs';
+import { getApiBaseUrl } from '../lib/platform';
 
 interface Message {
   id: string;
@@ -42,7 +43,7 @@ export default function FloatingChatBot() {
     setIsTyping(true);
 
     try {
-      const fetchResponse = await fetch('/.netlify/functions/ai_chat', {
+      const fetchResponse = await fetch(`${getApiBaseUrl()}/.netlify/functions/ai_chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

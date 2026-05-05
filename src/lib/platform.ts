@@ -28,3 +28,14 @@ export function isPWA(): boolean {
 export function shouldSkipLandingPage(): boolean {
   return isNativeApp() || isPWA();
 }
+
+// Get the base URL for API calls (Netlify functions)
+// In native apps, relative URLs don't work — we need the full Netlify URL
+const NETLIFY_SITE_URL = 'https://hydrosync.netlify.app';
+
+export function getApiBaseUrl(): string {
+  if (isNativeApp()) {
+    return NETLIFY_SITE_URL;
+  }
+  return '';
+}
