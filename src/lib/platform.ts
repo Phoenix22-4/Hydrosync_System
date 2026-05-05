@@ -30,12 +30,9 @@ export function shouldSkipLandingPage(): boolean {
 }
 
 // Get the base URL for API calls (Netlify functions)
-// In native apps, relative URLs don't work — we need the full Netlify URL
+// Always use the full Netlify URL where the function is deployed
 const NETLIFY_SITE_URL = 'https://vantixa2228.netlify.app';
 
 export function getApiBaseUrl(): string {
-  if (isNativeApp()) {
-    return NETLIFY_SITE_URL;
-  }
-  return '';
+  return NETLIFY_SITE_URL;
 }

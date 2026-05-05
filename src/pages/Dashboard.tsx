@@ -75,8 +75,8 @@ export default function Dashboard() {
 
   // ── MQTT Connection ──────────────────────────────────
   const mqttOptions = useMemo(() => ({
-    username: activeDevice?.mqtt_username,
-    password: activeDevice?.mqtt_password,
+    username: (import.meta.env.VITE_MQTT_USER as string | undefined)?.trim() || activeDevice?.mqtt_username,
+    password: (import.meta.env.VITE_MQTT_PASS as string | undefined)?.trim() || activeDevice?.mqtt_password,
     onMessage: (topic: string, message: Buffer) => {
       try {
         const payload = JSON.parse(message.toString());
@@ -395,8 +395,8 @@ export default function Dashboard() {
         try {
           const brokerUrl = toWsBrokerUrl(resolvedBroker);
           const client = mqtt.connect(brokerUrl, {
-            username: activeDevice.mqtt_username,
-            password: activeDevice.mqtt_password,
+            username: (import.meta.env.VITE_MQTT_USER as string | undefined)?.trim() || activeDevice.mqtt_username,
+            password: (import.meta.env.VITE_MQTT_PASS as string | undefined)?.trim() || activeDevice.mqtt_password,
             clientId: `hydrosync_web_${Math.random().toString(16).slice(2, 8)}`,
           });
           client.on('connect', () => { client.publish(`devices/${mqttTopicDeviceId}/commands`, JSON.stringify({ command: cmd })); client.end(); });

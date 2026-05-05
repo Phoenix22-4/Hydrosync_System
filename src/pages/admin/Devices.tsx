@@ -115,6 +115,8 @@ export default function AdminDevices() {
   }, []);
 
   const mqttOptions = useMemo(() => ({
+    username: (import.meta.env.VITE_MQTT_USER as string | undefined)?.trim() || undefined,
+    password: (import.meta.env.VITE_MQTT_PASS as string | undefined)?.trim() || undefined,
     onMessage: (topic: string, message: Buffer) => {
       handleMqttMessage(topic, message, devices);
     },
