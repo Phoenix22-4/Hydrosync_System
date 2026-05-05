@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { collection, query, onSnapshot, orderBy, updateDoc, doc, limit, where } from 'firebase/firestore';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { collection, query, onSnapshot, orderBy, updateDoc, doc, limit, where, serverTimestamp } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../../firebase';
 import { useAuth } from '../../App';
@@ -11,6 +11,8 @@ import { isDeviceOffline, getLastSeenString } from '../../lib/status';
 import { Telemetry } from '../../types';
 import PullToRefresh from '../../components/PullToRefresh';
 import { useAdminMqttAutoRegister } from '../../hooks/useAdminMqttAutoRegister';
+import { useMQTT } from '../../hooks/useMQTT';
+import mqtt from 'mqtt';
 
 export default function AdminDevices() {
   const [devices, setDevices] = useState<Device[]>([]);
@@ -24,10 +26,96 @@ export default function AdminDevices() {
   const [savingMqtt, setSavingMqtt] = useState(false);
   const [showMqttPassword, setShowMqttPassword] = useState(false);
   const [hasActiveHosts, setHasActiveHosts] = useState(true);
+  const [fallbackBroker, setFallbackBroker] = useState<string | null>(null);
   const { user } = useAuth();
   const navigate = useNavigate();
   const { status: bridgeStatus } = useAdminMqttAutoRegister(!!user);
+  
+  // Track last update timestamps for real-time sync per device
+  const lastUpdateRef = useRef<Record<string, number>>({});
 
+  // ── Fetch MQTT Hosts for real-time connection ─────────
+  useEffect(() => {
+    if (!user) return;
+    const hostsQ = query(collection(db, 'mqtt_hosts'), where('status', '==', 'active'));
+    return onSnapshot(hostsQ, (snap) => {
+      if (!snap.empty) {
+        const host = snap.docs[0].data();
+        setFallbackBroker(host.url?.trim() || null);
+      } else {
+        setFallbackBroker(null);
+      }
+    });
+  }, [user]);
+
+  const toWsBrokerUrl = (rawBroker: string) => {
+    const trimmed = rawBroker.trim();
+    if (!trimmed) return '';
+    if (trimmed.startsWith('ws://') || trimmed.startsWith('wss://')) return trimmed;
+    if (trimmed.startsWith('http://')) return `ws://${trimmed.slice(7)}`;
+    if (trimmed.startsWith('https://')) return `wss://${trimmed.slice(8)}`;
+    if (trimmed.includes('/mqtt')) return `wss://${trimmed}`;
+    if (/:([0-9]{2,5})$/i.test(trimmed)) return `wss://${trimmed}/mqtt`;
+    return `wss://${trimmed}:8884/mqtt`;
+  };
+
+  // ── MQTT Connection for Real-Time Admin Updates ───────
+  const handleMqttMessage = useCallback((topic: string, message: Buffer, devicesList: Device[]) => {
+    try {
+      const payload = JSON.parse(message.toString());
+      const topicLc = topic.toLowerCase();
+      
+      // Find which device this message is for
+      const targetDevice = devicesList.find(device =>
+        topicLc.startsWith(`devices/${(device.mqtt_topic || device.device_id || device.id).toLowerCase()}/`)
+      );
+      
+      if (!targetDevice) return;
+      const deviceId = targetDevice.id;
+      
+      if (topicLc.includes('/data')) {
+        const now = Date.now();
+        lastUpdateRef.current[deviceId] = now;
+        
+        setTelemetryMap(prev => ({
+          ...prev,
+          [deviceId]: {
+            recorded_at: { seconds: Math.floor(now / 1000), nanoseconds: (now % 1000) * 1000000 } as any,
+            overhead_level: payload.overhead_level ?? prev[deviceId]?.overhead_level ?? 50,
+            underground_level: payload.underground_level ?? prev[deviceId]?.underground_level ?? 50,
+            pump_status: payload.pump_status ?? prev[deviceId]?.pump_status ?? false,
+            pump_current: parseFloat(payload.pump_current) || prev[deviceId]?.pump_current || 0,
+            system_status: payload.system_status || prev[deviceId]?.system_status || 'System Ready',
+          }
+        }));
+        
+        // Update device status in Firestore for persistence
+        updateDoc(doc(db, 'devices', deviceId), {
+          last_seen: serverTimestamp(),
+          overhead_level: payload.overhead_level,
+          underground_level: payload.underground_level,
+          pump_status: payload.pump_status,
+          current_draw: parseFloat(payload.pump_current) || 0,
+          error_state: payload.system_status,
+        }).catch(err => console.error('Error updating device:', err));
+      }
+    } catch (err) {
+      console.error('MQTT message parse error:', err);
+    }
+  }, []);
+
+  const mqttOptions = useMemo(() => ({
+    onMessage: (topic: string, message: Buffer) => {
+      handleMqttMessage(topic, message, devices);
+    },
+  }), [devices, handleMqttMessage]);
+
+  const { isConnected: mqttConnected, subscribe } = useMQTT(
+    fallbackBroker ? toWsBrokerUrl(fallbackBroker) : undefined,
+    mqttOptions
+  );
+
+  // ── Fetch devices ─────────────────────────────────────
   useEffect(() => {
     if (!user) return;
     const q = query(collection(db, 'devices'), orderBy('registered_at', 'desc'));
@@ -36,7 +124,7 @@ export default function AdminDevices() {
       setDevices(devs);
       setLoading(false);
 
-      // Fetch latest telemetry for each device
+      // Fetch latest telemetry for each device (Firestore fallback)
       devs.forEach(device => {
         const tq = query(
           collection(db, 'devices', device.id, 'telemetry'),
@@ -45,10 +133,19 @@ export default function AdminDevices() {
         );
         onSnapshot(tq, (tSnap) => {
           if (!tSnap.empty) {
-            setTelemetryMap(prev => ({
-              ...prev,
-              [device.id]: tSnap.docs[0].data() as Telemetry
-            }));
+            const newTelemetry = tSnap.docs[0].data() as Telemetry;
+            const firestoreTime = newTelemetry.recorded_at?.toMillis?.() || 
+                                 (newTelemetry.recorded_at?.seconds || 0) * 1000;
+            const lastUpdateTime = lastUpdateRef.current[device.id] || 0;
+            
+            // Only update if Firestore data is newer than our last MQTT update
+            if (firestoreTime >= lastUpdateTime - 2000) {
+              setTelemetryMap(prev => ({
+                ...prev,
+                [device.id]: newTelemetry
+              }));
+              lastUpdateRef.current[device.id] = firestoreTime;
+            }
           }
         });
       });
@@ -56,11 +153,17 @@ export default function AdminDevices() {
     return () => unsubscribe();
   }, [user]);
 
+  // ── MQTT Subscription for all devices ─────────────────
   useEffect(() => {
-    if (!user) return;
-    const hostsQ = query(collection(db, 'mqtt_hosts'), where('status', '==', 'active'));
-    return onSnapshot(hostsQ, (snap) => setHasActiveHosts(!snap.empty));
-  }, [user]);
+    if (!mqttConnected || devices.length === 0) return;
+    
+    devices.forEach(device => {
+      const topicId = device.mqtt_topic?.trim() || device.device_id || device.id;
+      const dataTopic = `devices/${topicId}/data`;
+      subscribe(dataTopic);
+    });
+  }, [mqttConnected, devices, subscribe]);
+
 
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);

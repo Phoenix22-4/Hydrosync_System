@@ -40,6 +40,8 @@ export default function Dashboard() {
   const [isOffline, setIsOffline]       = useState(false);
   const [isInternetOffline, setIsInternetOffline] = useState(!navigator.onLine);
   const [fallbackBroker, setFallbackBroker] = useState<string | null>(null);
+  // Track last telemetry update timestamp for real-time sync
+  const lastTelemetryUpdateRef = useRef<number>(Date.now());
 
   useEffect(() => {
     const handleOnline = () => setIsInternetOffline(false);
@@ -96,9 +98,11 @@ export default function Dashboard() {
         const targetTopicId = targetDevice.mqtt_topic || targetDevice.device_id || targetDevice.id;
 
         if (topicLc === `devices/${targetTopicId.toLowerCase()}/data`) {
-          // Update telemetry with live data
+          // Update telemetry with live data - mark timestamp for real-time tracking
+          const now = Date.now();
+          lastTelemetryUpdateRef.current = now;
           setTelemetry({
-            recorded_at: serverTimestamp() as any,
+            recorded_at: { seconds: Math.floor(now / 1000), nanoseconds: (now % 1000) * 1000000 } as any,
             overhead_level: payload.overhead_level ?? telemetry?.overhead_level ?? 50,
             underground_level: payload.underground_level ?? telemetry?.underground_level ?? 50,
             pump_status: payload.pump_status ?? telemetry?.pump_status ?? false,
@@ -223,7 +227,18 @@ export default function Dashboard() {
     );
     return onSnapshot(q, (snap) => {
       if (!snap.empty) {
-        setTelemetry(snap.docs[0].data() as Telemetry);
+        const newTelemetry = snap.docs[0].data() as Telemetry;
+        // Only update if Firestore data is newer than our last MQTT update (within 2 second tolerance)
+        const firestoreTime = newTelemetry.recorded_at?.toMillis?.() || 
+                             (newTelemetry.recorded_at?.seconds || 0) * 1000;
+        const lastUpdateTime = lastTelemetryUpdateRef.current;
+        
+        // Update if Firestore data is newer than our last real-time update
+        if (firestoreTime >= lastUpdateTime - 2000) {
+          setTelemetry(newTelemetry);
+          lastTelemetryUpdateRef.current = firestoreTime;
+        }
+        // Otherwise keep the real-time MQTT data (it's fresher)
       } else {
         setTelemetry({
           recorded_at:       serverTimestamp() as any,
