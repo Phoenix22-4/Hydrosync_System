@@ -1,4 +1,4 @@
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export const handler = async (event) => {
   // CORS headers for all responses
@@ -53,28 +53,18 @@ export const handler = async (event) => {
   }
 
   try {
-    const ai = new GoogleGenAI({ apiKey });
-    
-    // Use correct model name - gemini-1.5-flash or gemini-pro
-    const response = await ai.models.generateContent({
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({
       model: 'gemini-1.5-flash',
-      contents: [
-        {
-          role: 'user',
-          parts: [{ text: message }],
-        },
-      ],
-      config: {
-        systemInstruction: `You are HydroSync AI, a smart assistant for the HydroSync water management application. Use the following documentation to answer questions accurately and in a friendly, conversational tone. Do not copy-paste the documentation verbatim. If the user asks something not in the documentation, answer using your general knowledge but remain focused on water system management.
+      systemInstruction: `You are HydroSync AI, a smart assistant for the HydroSync water management application. Use the following documentation to answer questions accurately and in a friendly, conversational tone. Do not copy-paste the documentation verbatim. If the user asks something not in the documentation, answer using your general knowledge but remain focused on water system management.
 
 USER DOCUMENTATION:
 ${documentation || 'No extra documentation provided.'}`,
-        temperature: 0.7,
-      },
     });
 
-    // Extract text from response
-    const resultText = response.text || (response.candidates?.[0]?.content?.parts?.[0]?.text) || '';
+    const result = await model.generateContent(message);
+    const response = await result.response;
+    const resultText = response.text();
     
     return {
       statusCode: 200,
