@@ -21,3 +21,6 @@ gradle-8.14.3-all.zip
 *.apk
 public/*.apk
 android/app/build/
+
+# Local Netlify folder
+.netlify

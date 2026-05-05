@@ -300,7 +300,7 @@ export default function Dashboard() {
         }
       })();
     }
-  }, [telemetry, activeDevice, user]);
+  }, [telemetry, activeDevice, user, deviceHeartbeatAlive]);
 
   // ── Activity logs ─────────────────────────────────────
   useEffect(() => {
