@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Send, MessageCircle, X, Loader2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { USER_DOCUMENTATION } from '../constants/docs';
-import { getApiBaseUrl } from '../lib/platform';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 interface Message {
   id: string;
@@ -64,35 +64,29 @@ export default function FloatingChatBot() {
         return;
       }
 
-      lastRequestTime = Date.now();
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error('Gemini API key not configured. Set VITE_GEMINI_API_KEY in .env');
+      }
 
-      // Use Netlify serverless function (API key stays server-side)
-      const apiBase = getApiBaseUrl();
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({
+        model: 'gemini-2.5-flash',
+        systemInstruction: SYSTEM_PROMPT,
+      });
+
+      lastRequestTime = Date.now();
+      // Retry up to 3 times for 503 (server overloaded) errors
       let responseText = '';
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          const res = await fetch(`${apiBase}/.netlify/functions/ai_chat`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: currentInput, documentation: USER_DOCUMENTATION }),
-          });
-          if (!res.ok) {
-            const errText = await res.text();
-            const is503 = res.status === 503 || errText.includes('503');
-            if (is503 && attempt < 2) {
-              const delay = Math.pow(2, attempt + 1) * 2000;
-              await new Promise(r => setTimeout(r, delay));
-              continue;
-            }
-            throw new Error(`AI service error (${res.status})`);
-          }
-          const data = await res.json();
-          responseText = data.result || '';
+          const result = await model.generateContent(currentInput);
+          responseText = result.response.text();
           break;
         } catch (err: any) {
           const is503 = err?.message?.includes('503') || err?.message?.includes('high demand');
           if (is503 && attempt < 2) {
-            const delay = Math.pow(2, attempt + 1) * 2000;
+            const delay = Math.pow(2, attempt + 1) * 2000; // 4s, 8s
             await new Promise(r => setTimeout(r, delay));
             continue;
           }

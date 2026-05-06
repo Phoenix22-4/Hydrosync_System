@@ -1,24 +1,21 @@
-# HydroSync ProGuard Rules
+# Add project specific ProGuard rules here.
+# You can control the set of applied configuration files using the
+# proguardFiles setting in build.gradle.
+#
+# For more details, see
+#   http://developer.android.com/guide/developing/tools/proguard.html
 
-# Keep line numbers for crash logs
--keepattributes SourceFile,LineNumberTable
--renamesourcefileattribute SourceFile
+# If your project uses WebView with JS, uncomment the following
+# and specify the fully qualified class name to the JavaScript interface
+# class:
+#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
+#   public *;
+#}
 
-# Capacitor - WebView bridge classes must not be renamed
--keep class com.getcapacitor.** { *; }
--keepclassmembers class * extends com.getcapacitor.Plugin {
-    @com.getcapacitor.annotation.CapacitorPlugin <methods>;
-}
+# Uncomment this to preserve the line number information for
+# debugging stack traces.
+#-keepattributes SourceFile,LineNumberTable
 
-# Firebase - keep all public API classes
--keep class com.google.firebase.** { *; }
--dontwarn com.google.firebase.**
-
-# MQTT (HiveMQ client uses reflection)
--keep class org.eclipse.paho.** { *; }
--dontwarn org.eclipse.paho.**
-
-# Keep JavaScript interface for WebView
--keepclassmembers class * {
-    @android.webkit.JavascriptInterface <methods>;
-}
+# If you keep the line number information, uncomment this to
+# hide the original source file name.
+#-renamesourcefileattribute SourceFile

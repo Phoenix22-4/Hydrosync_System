@@ -103,10 +103,10 @@ export default function Dashboard() {
         const targetTopicId = targetDevice.mqtt_topic || targetDevice.device_id || targetDevice.id;
 
         if (topicLc === `devices/${targetTopicId.toLowerCase()}/data`) {
-          // Rate limiting: only update if more than 9 seconds since last update
-          // This matches ESP32's 10-second sending interval to avoid confusion
+          // Rate limiting: only update if more than 8 seconds since last update
+          // This matches ESP32's 10-second sending interval
           const now = Date.now();
-          if (now - lastUpdateTimeRef.current < 9000) return;
+          if (now - lastUpdateTimeRef.current < 8000) return;
           lastUpdateTimeRef.current = now;
           lastTelemetryUpdateRef.current = now;
           

@@ -64,10 +64,10 @@ function maskEmail(email: string): string {
 }
 
 function validateDeviceIdFormat(id: string): string | null {
-  const t = id.trim().toUpperCase();
+  const t = id.trim();
   if (!t) return 'Device ID is required.';
-  if (!/^[A-Z]{2,10}_[0-9]{2,}$/.test(t))
-    return 'Format: 2-10 letters, underscore, then 2+ digits. Example: HOME_01, TANK_02, HYDROSYNC_10';
+  if (!/^[A-Za-z]{2,10}_[0-9]{2,}$/.test(t))
+    return 'Format: 2-10 letters, underscore, then 2+ digits. Example: HOME_01, TANK_02, HydroSync_10';
   return null;
 }
 
@@ -214,7 +214,7 @@ function Step1EnterDeviceId({ onNext }: Step1Props) {
   const { user } = useAuth();
 
   const handleNext = useCallback(async () => {
-    const formatted = deviceId.trim().toUpperCase();
+    const formatted = deviceId.trim();
     const fmtErr = validateDeviceIdFormat(formatted);
     if (fmtErr) { setError(fmtErr); return; }
 
@@ -223,18 +223,11 @@ function Step1EnterDeviceId({ onNext }: Step1Props) {
 
     try {
       // 1. Check device exists in Firestore 'devices' collection
-      // Query by device_id field (case-insensitive: try uppercase first, then original)
-      let snap = await getDocs(query(
+      const q = query(
         collection(db, 'devices'),
         where('device_id', '==', formatted)
-      ));
-      // Fallback: try with the original case the user typed (before uppercase)
-      if (snap.empty && formatted !== deviceId.trim()) {
-        snap = await getDocs(query(
-          collection(db, 'devices'),
-          where('device_id', '==', deviceId.trim())
-        ));
-      }
+      );
+      const snap = await getDocs(q);
 
       if (snap.empty) {
         setError('Device not found. Check your Device ID and try again. Contact support if the issue persists.');
@@ -290,11 +283,11 @@ function Step1EnterDeviceId({ onNext }: Step1Props) {
           type="text"
           value={deviceId}
           onChange={(e) => {
-            setDeviceId(e.target.value.toUpperCase());
+            setDeviceId(e.target.value);
             setError(null);
           }}
           onKeyDown={(e) => e.key === 'Enter' && handleNext()}
-          placeholder="e.g. HOME_01, TANK_02"
+          placeholder="e.g. HydroSync_01, TANK_02"
           hasError={!!error}
           maxLength={14}
           spellCheck={false}

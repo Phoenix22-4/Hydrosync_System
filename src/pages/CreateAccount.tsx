@@ -46,7 +46,7 @@ export default function CreateAccount() {
       // 1. Check if Device ID exists and is unassigned (if provided)
       let deviceToken: string | null = null;
       if (formData.deviceId.trim()) {
-        const deviceRef = doc(db, 'devices', formData.deviceId.toUpperCase());
+        const deviceRef = doc(db, 'devices', formData.deviceId.trim());
         const deviceSnap = await getDoc(deviceRef);
 
         if (!deviceSnap.exists()) {
@@ -82,7 +82,7 @@ export default function CreateAccount() {
         email: formData.email,
         status: 'pending',
         created_at: serverTimestamp(),
-        device_ids: formData.deviceId.trim() ? [formData.deviceId.toUpperCase()] : [],
+        device_ids: formData.deviceId.trim() ? [formData.deviceId.trim()] : [],
         role: 'user'
       });
 
@@ -104,7 +104,7 @@ export default function CreateAccount() {
 
       // 4. Update device with generated token and assign to user
       if (formData.deviceId.trim() && deviceToken) {
-        const deviceRef = doc(db, 'devices', formData.deviceId.toUpperCase());
+        const deviceRef = doc(db, 'devices', formData.deviceId.trim());
         await updateDoc(deviceRef, {
           token: deviceToken,
           assigned_to_user: user.uid,
@@ -118,14 +118,14 @@ export default function CreateAccount() {
         console.log(`========================================`);
         console.log(`DEVICE TOKEN EMAIL (Simulated)`);
         console.log(`To: ${formData.email}`);
-        console.log(`Device: ${formData.deviceId.toUpperCase()}`);
+        console.log(`Device: ${formData.deviceId.trim()}`);
         console.log(`Token: ${deviceToken}`);
         console.log(`========================================`);
       }
       
       // Store device ID for token page
       if (formData.deviceId.trim()) {
-        setDeviceId(formData.deviceId.toUpperCase());
+        setDeviceId(formData.deviceId.trim());
       }
       
       // Move to Step 2 - Token confirmation page
@@ -297,8 +297,8 @@ export default function CreateAccount() {
                 type="text"
                 value={formData.deviceId}
                 onChange={handleChange}
-                placeholder="HOME_01"
-                className="w-full bg-[#1a2234] border border-white/5 rounded-xl py-3 pl-11 pr-4 text-white text-sm placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 uppercase transition-all"
+                placeholder="HydroSync_01"
+                className="w-full bg-[#1a2234] border border-white/5 rounded-xl py-3 pl-11 pr-4 text-white text-sm placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 font-mono transition-all"
               />
             </div>
           </div>

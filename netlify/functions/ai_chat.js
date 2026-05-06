@@ -1,17 +1,7 @@
 export const handler = async (event) => {
-  // Restrict CORS to HydroSync domain in production
-  const origin = event.headers.origin || event.headers.Origin || '';
-  const allowedOrigins = [
-    'https://vantixa2228.netlify.app',
-    'http://localhost:3000',
-    'http://localhost:8888',
-    'http://localhost:64680',
-  ];
-  const corsOrigin = allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
-
   const headers = {
     'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': corsOrigin,
+    'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
   };

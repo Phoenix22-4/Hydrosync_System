@@ -53,7 +53,7 @@ function extractDeviceIdFromTopic(topic: string): { canonicalId: string; topicId
   const topicId = match[1].trim();
   if (!topicId) return null;
   return {
-    canonicalId: topicId.toUpperCase(),
+    canonicalId: topicId, // Preserve original case from MQTT topic
     topicId,
   };
 }
@@ -61,7 +61,8 @@ function extractDeviceIdFromTopic(topic: string): { canonicalId: string; topicId
 export function useAdminMqttAutoRegister(enabled: boolean) {
   const [status, setStatus] = useState<'offline' | 'connecting' | 'online' | 'no_hosts'>('offline');
   const clientsRef = useRef<MqttClient[]>([]);
-  const knownDeviceIdsRef = useRef<Set<string>>(new Set());
+  // Map: lowercase device_id -> actual Firestore doc ID (case-insensitive dedup)
+  const knownDeviceIdsRef = useRef<Map<string, string>>(new Map());
   const statusTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isUpdatingStatusRef = useRef(false);
 
@@ -87,13 +88,13 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
 
       try {
         const existingDevices = await getDocs(collection(db, 'devices'));
-        const ids = new Set<string>();
+        const idMap = new Map<string, string>(); // lowercase -> actual Firestore doc ID
         existingDevices.docs.forEach((d) => {
           const data = d.data() as { device_id?: string };
-          const id = (data.device_id || d.id || '').trim().toUpperCase();
-          if (id) ids.add(id);
+          const deviceId = (data.device_id || d.id || '').trim();
+          if (deviceId) idMap.set(deviceId.toLowerCase(), d.id); // d.id is the Firestore doc ID
         });
-        knownDeviceIdsRef.current = ids;
+        knownDeviceIdsRef.current = idMap;
       } catch (e) {
         console.warn('[MQTT Bridge] Could not preload known device list:', e);
       }
@@ -212,7 +213,7 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
           try {
             const parts = topic.split('/');
             if (parts.length < 2 || parts[0] !== 'devices') return;
-            const deviceId = parts[1].trim().toUpperCase(); // Normalize to uppercase to match AddDevice flow
+            const deviceId = parts[1].trim(); // Preserve original case
             if (!deviceId) return;
             const channel = (parts[2] || '').toLowerCase();
             // Reduce console logging for performance
@@ -243,59 +244,39 @@ try {
               parsedPayload = { raw: message.toString() };
             }
 
-            // Only write to Firestore for new devices or every 5 minutes
-            // This prevents quota exhaustion from writing on every MQTT message
-            const isNewDevice = !knownDeviceIdsRef.current.has(deviceId);
-            const lastDeviceWrite = lastForwardedMessages.get(`device_${deviceId}`);
+            // Case-insensitive dedup: find existing Firestore doc for this device
+            const lowerDeviceId = deviceId.toLowerCase();
+            const existingDocId = knownDeviceIdsRef.current.get(lowerDeviceId);
+            const isNewDevice = !existingDocId;
+            // Use the existing Firestore doc ID if found, otherwise use the MQTT deviceId
+            const firestoreDocId = existingDocId || deviceId;
+            const lastDeviceWrite = lastForwardedMessages.get(`device_${firestoreDocId}`);
             const DEVICE_WRITE_INTERVAL = 300000; // 5 minutes
 
             if (isNewDevice || !lastDeviceWrite || (Date.now() - lastDeviceWrite.timestamp > DEVICE_WRITE_INTERVAL)) {
-              // Look up existing device by device_id field (case-insensitive match)
-              // This prevents duplicate docs when ESP32 sends "HydroSync_01" but user registered "HYDROSYNC_01"
-              const existingQ = query(collection(db, 'devices'), where('device_id', '==', deviceId));
-              const existingSnap = await getDocs(existingQ);
-              
-              let deviceRef;
-              let existingData: any = null;
-              
-              if (!existingSnap.empty) {
-                // Device already exists — use its Firestore doc ID (preserve original)
-                const existingDoc = existingSnap.docs[0];
-                deviceRef = doc(db, 'devices', existingDoc.id);
-                existingData = existingDoc.data();
-              } else {
-                // New device — create with normalized uppercase ID
-                deviceRef = doc(db, 'devices', deviceId);
-              }
+              const deviceRef = doc(db, 'devices', firestoreDocId);
+              const existing = await getDoc(deviceRef);
 
-              const token = existingData?.token || randomToken32();
-              const firstRegisteredAt = existingData?.registered_at || serverTimestamp();
+              const token = existing.exists() ? (existing.data() as any)?.token : randomToken32();
+              const firstRegisteredAt = existing.exists() ? (existing.data() as any)?.registered_at : serverTimestamp();
 
-              // Build update object — only set MQTT/bridge fields, never overwrite user-configured fields
-              const bridgeUpdate: Record<string, any> = {
-                device_id: deviceId,
-                token,
-                status: existingData?.status || 'unassigned',
-                registered_at: firstRegisteredAt,
-                mqtt_broker: normalizeBrokerInput(host.url || ''),
-                mqtt_username: mqttUser || null,
-                mqtt_password: mqttPass || null,
-                mqtt_topic: deviceId,
-                last_seen: serverTimestamp(),
-              };
-
-              // Preserve user-configured fields if they exist
-              if (existingData?.name) bridgeUpdate.name = existingData.name;
-              if (existingData?.ohCap) bridgeUpdate.ohCap = existingData.ohCap;
-              if (existingData?.ugCap) bridgeUpdate.ugCap = existingData.ugCap;
-              if (existingData?.region) bridgeUpdate.region = existingData.region;
-              if (existingData?.assigned_to_user) bridgeUpdate.assigned_to_user = existingData.assigned_to_user;
-              if (existingData?.user_name) bridgeUpdate.user_name = existingData.user_name;
-              if (existingData?.linked_at) bridgeUpdate.linked_at = existingData.linked_at;
-
-              await setDoc(deviceRef, bridgeUpdate, { merge: true });
-              if (isNewDevice) knownDeviceIdsRef.current.add(deviceId);
-              lastForwardedMessages.set(`device_${deviceId}`, { timestamp: Date.now() });
+              await setDoc(
+                deviceRef,
+                {
+                  device_id: deviceId, // Always store the original case from MQTT
+                  token,
+                  status: (existing.exists() ? (existing.data() as any)?.status : 'unassigned') || 'unassigned',
+                  registered_at: firstRegisteredAt || serverTimestamp(),
+                  mqtt_broker: normalizeBrokerInput(host.url || ''),
+                  mqtt_username: mqttUser || null,
+                  mqtt_password: mqttPass || null,
+                  mqtt_topic: deviceId,
+                  last_seen: serverTimestamp(),
+                },
+                { merge: true }
+              );
+              if (isNewDevice) knownDeviceIdsRef.current.set(lowerDeviceId, firestoreDocId);
+              lastForwardedMessages.set(`device_${firestoreDocId}`, { timestamp: Date.now() });
             }
 
             // Keep wildcard visibility for all device topics, but write telemetry
@@ -307,15 +288,16 @@ try {
             // Write telemetry to Firestore every 30 seconds for B2B analytics
             // (water usage, pump peak hours, power usage)
             const TELEMETRY_WRITE_INTERVAL = 30000; // 30 seconds
-            const lastTelemetryWrite = lastForwardedMessages.get(`telemetry_${deviceId}`);
+            const telemetryDocId = knownDeviceIdsRef.current.get(lowerDeviceId) || deviceId;
+            const lastTelemetryWrite = lastForwardedMessages.get(`telemetry_${telemetryDocId}`);
             if (!lastTelemetryWrite || (Date.now() - lastTelemetryWrite.timestamp > TELEMETRY_WRITE_INTERVAL)) {
               try {
-                await addDoc(collection(db, 'devices', deviceId, 'telemetry'), {
+                await addDoc(collection(db, 'devices', telemetryDocId, 'telemetry'), {
                   ...parsedPayload,
                   timestamp: serverTimestamp(),
                   device_id: deviceId,
                 });
-                lastForwardedMessages.set(`telemetry_${deviceId}`, { timestamp: Date.now() });
+                lastForwardedMessages.set(`telemetry_${telemetryDocId}`, { timestamp: Date.now() });
               } catch (telemetryErr) {
                 // Don't fail the whole handler if telemetry write fails
                 console.warn('[MQTT Bridge] Telemetry write skipped:', telemetryErr);

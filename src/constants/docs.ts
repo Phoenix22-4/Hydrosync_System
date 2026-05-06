@@ -32,8 +32,7 @@ HydroSync is an IoT-based, dual-tank autonomous water management system engineer
 - Go to **Settings** > **Device Info**.
 - Tap **"Add New Device"**.
 - Enter the **Device ID** (found on the sticker on your controller).
-- After verifying your email, your device token will be **displayed on screen** — copy it and paste it in the verification field to link the device to your account.
-- **Note:** The token is NOT sent to your email. It is shown on screen after email verification.
+- After verifying your email, a verification token will be **displayed on screen**. Copy it and paste it to link the device to your account. The token is NOT sent to your email.
 `;
 
 export const ADMIN_DOCUMENTATION = `
@@ -62,7 +61,7 @@ HydroSync is an IoT-based, dual-tank autonomous water management system. The pri
 - **Security:** TLS 1.2 encryption on port 8883.
 - **MQTT Topics:**
   - \`devices/HydroSync_001/#\`: Telemetry & status (commonly \`devices/HydroSync_001/data\`).
-  - \`hydrosync/data/HydroSync_001\`: Telemetry JSON every 10s (legacy).
+  - \`devices/HydroSync_001/data\`: Telemetry JSON every 10s.
   - \`devices/HydroSync_001/commands\`: Remote commands (PUMP_ON, PUMP_OFF, RESET_ERROR).
   - \`hydrosync/alerts/HydroSync_001\`: Critical events (dry run, empty tank).
   - \`hydrosync/status/HydroSync_001\`: LWT "online"/"offline" status.

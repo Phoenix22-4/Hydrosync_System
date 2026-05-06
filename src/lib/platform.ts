@@ -33,14 +33,10 @@ export function shouldSkipLandingPage(): boolean {
 const NETLIFY_SITE_URL = 'https://vantixa2228.netlify.app';
 
 export function getApiBaseUrl(): string {
-  // Native app (APK) — always use Netlify URL
-  if (isNativeApp()) {
-    return NETLIFY_SITE_URL;
-  }
   // In local development, use localhost so Netlify dev CLI can serve functions
   if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
     return `http://localhost:${window.location.port || '8888'}`;
   }
-  // In production (deployed site), use the Netlify URL
+  // In production (deployed site or native app), use the Netlify URL
   return NETLIFY_SITE_URL;
 }
