@@ -223,11 +223,18 @@ function Step1EnterDeviceId({ onNext }: Step1Props) {
 
     try {
       // 1. Check device exists in Firestore 'devices' collection
-      const q = query(
+      // Query by device_id field (case-insensitive: try uppercase first, then original)
+      let snap = await getDocs(query(
         collection(db, 'devices'),
         where('device_id', '==', formatted)
-      );
-      const snap = await getDocs(q);
+      ));
+      // Fallback: try with the original case the user typed (before uppercase)
+      if (snap.empty && formatted !== deviceId.trim()) {
+        snap = await getDocs(query(
+          collection(db, 'devices'),
+          where('device_id', '==', deviceId.trim())
+        ));
+      }
 
       if (snap.empty) {
         setError('Device not found. Check your Device ID and try again. Contact support if the issue persists.');

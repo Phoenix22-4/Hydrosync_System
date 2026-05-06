@@ -250,27 +250,50 @@ try {
             const DEVICE_WRITE_INTERVAL = 300000; // 5 minutes
 
             if (isNewDevice || !lastDeviceWrite || (Date.now() - lastDeviceWrite.timestamp > DEVICE_WRITE_INTERVAL)) {
-              const deviceRef = doc(db, 'devices', deviceId);
-              const existing = await getDoc(deviceRef);
+              // Look up existing device by device_id field (case-insensitive match)
+              // This prevents duplicate docs when ESP32 sends "HydroSync_01" but user registered "HYDROSYNC_01"
+              const existingQ = query(collection(db, 'devices'), where('device_id', '==', deviceId));
+              const existingSnap = await getDocs(existingQ);
+              
+              let deviceRef;
+              let existingData: any = null;
+              
+              if (!existingSnap.empty) {
+                // Device already exists — use its Firestore doc ID (preserve original)
+                const existingDoc = existingSnap.docs[0];
+                deviceRef = doc(db, 'devices', existingDoc.id);
+                existingData = existingDoc.data();
+              } else {
+                // New device — create with normalized uppercase ID
+                deviceRef = doc(db, 'devices', deviceId);
+              }
 
-              const token = existing.exists() ? (existing.data() as any)?.token : randomToken32();
-              const firstRegisteredAt = existing.exists() ? (existing.data() as any)?.registered_at : serverTimestamp();
+              const token = existingData?.token || randomToken32();
+              const firstRegisteredAt = existingData?.registered_at || serverTimestamp();
 
-              await setDoc(
-                deviceRef,
-                {
-                  device_id: deviceId,
-                  token,
-                  status: (existing.exists() ? (existing.data() as any)?.status : 'unassigned') || 'unassigned',
-                  registered_at: firstRegisteredAt || serverTimestamp(),
-                  mqtt_broker: normalizeBrokerInput(host.url || ''),
-                  mqtt_username: mqttUser || null,
-                  mqtt_password: mqttPass || null,
-                  mqtt_topic: deviceId,
-                  last_seen: serverTimestamp(),
-                },
-                { merge: true }
-              );
+              // Build update object — only set MQTT/bridge fields, never overwrite user-configured fields
+              const bridgeUpdate: Record<string, any> = {
+                device_id: deviceId,
+                token,
+                status: existingData?.status || 'unassigned',
+                registered_at: firstRegisteredAt,
+                mqtt_broker: normalizeBrokerInput(host.url || ''),
+                mqtt_username: mqttUser || null,
+                mqtt_password: mqttPass || null,
+                mqtt_topic: deviceId,
+                last_seen: serverTimestamp(),
+              };
+
+              // Preserve user-configured fields if they exist
+              if (existingData?.name) bridgeUpdate.name = existingData.name;
+              if (existingData?.ohCap) bridgeUpdate.ohCap = existingData.ohCap;
+              if (existingData?.ugCap) bridgeUpdate.ugCap = existingData.ugCap;
+              if (existingData?.region) bridgeUpdate.region = existingData.region;
+              if (existingData?.assigned_to_user) bridgeUpdate.assigned_to_user = existingData.assigned_to_user;
+              if (existingData?.user_name) bridgeUpdate.user_name = existingData.user_name;
+              if (existingData?.linked_at) bridgeUpdate.linked_at = existingData.linked_at;
+
+              await setDoc(deviceRef, bridgeUpdate, { merge: true });
               if (isNewDevice) knownDeviceIdsRef.current.add(deviceId);
               lastForwardedMessages.set(`device_${deviceId}`, { timestamp: Date.now() });
             }
