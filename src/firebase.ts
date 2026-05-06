@@ -4,13 +4,13 @@ import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 
 // Hardcoded Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyDkZJzL8Z7Y3k4m5n6o7p8q9r0s1t2u3v4",
-  authDomain: "hydrosync-system.firebaseapp.com",
-  projectId: "hydrosync-system",
-  storageBucket: "hydrosync-system.appspot.com",
-  messagingSenderId: "123456789012",
-  appId: "1:123456789012:web:abcdef1234567890",
-  databaseId: "(default)"
+  apiKey: "AIzaSyAMZBDjhjMzmwMdfqypNpzBhKLGziAh9gA",
+  authDomain: "gen-lang-client-0769388576.firebaseapp.com",
+  projectId: "gen-lang-client-0769388576",
+  storageBucket: "gen-lang-client-0769388576.firebasestorage.app",
+  messagingSenderId: "824887409216",
+  appId: "1:824887409216:web:657f3447ee115704277da5",
+  databaseId: "ai-studio-29435203-c206-4d7b-8d53-88b01a2f2567"
 };
 
 // Initialize Firebase SDK
