@@ -153,6 +153,7 @@ service cloud.firestore {
     match /system/{docId} {
       allow read: if true;
       allow write: if isAdmin();
+      allow delete: if isAdmin();
     }
 
     match /aggregate_hourly/{hourId} {
@@ -206,6 +207,7 @@ service cloud.firestore {
     match /telemetry/{docId} {
       allow read: if isAuthenticated() || isAdmin();
       allow write: if isAdmin();
+      allow delete: if isAdmin();
     }
 
     match /devices/{deviceId}/telemetry/{telemetryId} {
@@ -219,7 +221,9 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/devices/$(deviceId)) &&
         get(/databases/$(database)/documents/devices/$(deviceId)).data.assigned_to_user == request.auth.uid
       );
-      allow write: if isAdmin();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
     }
 
     match /devices/{deviceId}/pump_events/{eventId} {
@@ -233,32 +237,27 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/devices/$(deviceId)) &&
         get(/databases/$(database)/documents/devices/$(deviceId)).data.assigned_to_user == request.auth.uid
       );
-      allow write: if isAdmin();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
     }
 
 
 
     match /activity_log/{logId} {
-      // Allow list queries with user_id filter, or single doc reads for owner/admin
-      allow read: if isAuthenticated() && (
-        isAdmin() || 
-        resource.data.user_id == request.auth.uid ||
-        (request.query.limit <= 100 && request.auth != null)
-      );
+      // Admins can read all; users can read own docs or list with limit
+      allow get: if isAuthenticated() && (isAdmin() || resource.data.user_id == request.auth.uid);
+      allow list: if isAuthenticated() && (isAdmin() || request.query.limit <= 100);
       allow create: if isAuthenticated() && (
         request.resource.data.user_id == request.auth.uid || isAdmin()
       );
-      allow update, delete: if isSuperuser();
+      allow update, delete: if isAdmin();
     }
 
     match /alerts/{alertId} {
-      // Allow list queries with user_id filter, or single doc reads for owner/admin
-      allow read: if isAdmin() || (
-        isAuthenticated() && (
-          resource.data.user_id == request.auth.uid ||
-          (request.query.limit <= 100 && request.auth != null)
-        )
-      );
+      // Admins can read all; users can read own alerts or list with limit
+      allow get: if isAdmin() || (isAuthenticated() && resource.data.user_id == request.auth.uid);
+      allow list: if isAdmin() || (isAuthenticated() && request.query.limit <= 100);
       allow update: if isAuthenticated() && resource.data.user_id == request.auth.uid &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'read_at']);
       allow create: if isAdmin() || (
@@ -266,7 +265,7 @@ service cloud.firestore {
         request.resource.data.user_id == request.auth.uid &&
         request.resource.data.read == false
       );
-      allow delete: if isSuperuser();
+      allow delete: if isAdmin();
     }
 
     match /commands/{commandId} {
@@ -311,7 +310,9 @@ service cloud.firestore {
 
     // MQTT hosts collection - for managing broker URLs
     match /mqtt_hosts/{hostId} {
-      allow read, write: if isAdmin();
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
       allow delete: if isSuperuser();
     }
 

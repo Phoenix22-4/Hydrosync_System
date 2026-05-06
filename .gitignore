@@ -4,7 +4,9 @@ dist/
 coverage/
 .DS_Store
 *.log
-.env*
+# Environment files contain sensitive credentials — never commit
+.env
+.env.*
 !.env.example
 
 # Local IDE files and generated Android wrapper bundle

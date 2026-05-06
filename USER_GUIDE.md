@@ -122,7 +122,7 @@ HydroSync provides comprehensive notifications for all critical system events. N
 
 ### Device Token
 - Each device has a **permanent unique token** (32 characters)
-- The token is displayed on screen for you to copy during device setup
+- The token is displayed on screen after you verify your email — it is **not** sent via email
 - Keep your token secure - it verifies ownership of your device
 - The token is required once to verify device ownership
 
@@ -217,11 +217,13 @@ HydroSync provides comprehensive notifications for all critical system events. N
 3. Enter your Device ID exactly as shown on the sticker
 4. Tap **"Continue"**
 
-#### Step 3: Copy Your Token
+#### Step 3: Verify Your Token
 1. Review your device information on screen
-2. Your 32-character device token will be displayed
+2. After verifying your email, your 32-character device token will be **displayed on screen**
 3. Click **"Copy"** to copy the token to your clipboard
-4. Click **"I have copied my token — Enter it"** to continue
+4. Paste the token in the verification field to link the device to your account
+
+> **Note:** The token is displayed on screen after email verification — it is **not** sent to your email.
 
 #### Step 4: Firmware and Device Connectivity
 - When the device powers on without saved credentials or after a factory reset, it starts the WiFi network: `HydroSync_Setup`.
@@ -307,7 +309,7 @@ HydroSync provides comprehensive notifications for all critical system events. N
 
 **HydroSync Dashboard v2.1**
 - **Last Updated**: April 2026
-- **Features**: Real-time monitoring, AI diagnostics, safety systems, email token delivery
+- **Features**: Real-time monitoring, AI diagnostics, safety systems, on-screen device token verification
 - **Compatibility**: Modern browsers, mobile devices
 - **Device Limit**: Up to 4 devices per user
 

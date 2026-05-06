@@ -518,7 +518,7 @@ export default function History() {
                     </div>
                   ) : activityLogs.length > 0 ? (
                     activityLogs.map((log, i) => (
-                      <div key={log.id || i} className="grid grid-cols-3 gap-4 p-4 border-b border-white/5 hover:bg-white/[0.02] transition-colors text-sm">
+                      <div key={log.id || `log-${i}`} className="grid grid-cols-3 gap-4 p-4 border-b border-white/5 hover:bg-white/[0.02] transition-colors text-sm">
                         <div className="text-slate-400 font-mono text-xs">
                           {log.timestamp?.toDate ? log.timestamp.toDate().toLocaleString() : 'Just now'}
                         </div>

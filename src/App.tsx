@@ -1,4 +1,4 @@
-import React, { useState, useEffect, createContext, useContext, ReactNode, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useRef, createContext, useContext, ReactNode, Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { onAuthStateChanged, User, sendEmailVerification, reload } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
@@ -64,25 +64,33 @@ export default function App() {
   // Initialize global notifications
   useNotifications(user);
 
+  // Cache profile to avoid redundant Firestore reads
+  const profileFetchedRef = useRef<string | null>(null);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
         setEmailVerified(firebaseUser.emailVerified);
-        try {
-          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-          if (userDoc.exists()) {
-            setProfile({ uid: firebaseUser.uid, ...userDoc.data() } as UserProfile);
-          } else {
+        // Only fetch profile if we haven't already for this UID
+        if (profileFetchedRef.current !== firebaseUser.uid) {
+          try {
+            const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+            if (userDoc.exists()) {
+              setProfile({ uid: firebaseUser.uid, ...userDoc.data() } as UserProfile);
+              profileFetchedRef.current = firebaseUser.uid;
+            } else {
+              setProfile(null);
+            }
+          } catch (error) {
+            console.error("Error fetching user profile:", error);
             setProfile(null);
           }
-        } catch (error) {
-          console.error("Error fetching user profile:", error);
-          setProfile(null);
         }
       } else {
         setProfile(null);
         setEmailVerified(false);
+        profileFetchedRef.current = null;
       }
       setLoading(false);
     });
@@ -108,7 +116,7 @@ export default function App() {
       } catch (error) {
         console.error("Error reloading user:", error);
       }
-    }, 3000); // Check every 3 seconds
+    }, 30000); // Check every 30 seconds (reduces Firestore reads)
 
     return () => clearInterval(interval);
   }, [user]);
@@ -137,9 +145,8 @@ export default function App() {
           )}
           <AppErrorBoundary>
             <Suspense fallback={<LoadingScreen />}>
-              <AnimatePresence mode="wait">
-                <AdminMqttBridge enabled={!!user && isAdmin} />
-                <Routes>
+              <AdminMqttBridge enabled={!!user && isAdmin} />
+              <Routes>
                 {/* Public Website or App Login - Skip landing page for native apps and PWAs */}
                 <Route path="/" element={shouldSkipLandingPage() ? <Login /> : <LandingPage />} />
                 
@@ -265,7 +272,6 @@ export default function App() {
                 {/* Fallback */}
                 <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
-              </AnimatePresence>
             </Suspense>
           </AppErrorBoundary>
         </div>

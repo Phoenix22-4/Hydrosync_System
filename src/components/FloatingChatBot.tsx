@@ -12,10 +12,16 @@ interface Message {
   timestamp: Date;
 }
 
+const SYSTEM_PROMPT = `You are HydroSync AI, a friendly water system assistant. You help people understand their water tank levels, pump status, and fix problems. Talk like a helpful neighbour — simple, clear, and practical. Keep answers short. If someone asks something unrelated, help but gently guide them back to water systems.\n\nWhat you know about HydroSync:\n${USER_DOCUMENTATION}`;
+
+// Cooldown to prevent hitting Gemini free tier rate limits
+let lastRequestTime = 0;
+const MIN_REQUEST_INTERVAL = 10000; // 10 seconds between requests
+
 export default function FloatingChatBot() {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
-    { id: '1', text: "HydroSync AI How can I help you with your water system today? 👋", sender: 'bot', timestamp: new Date() }
+    { id: '1', text: "Hi! I'm HydroSync AI 👋 How can I help you with your water system today?", sender: 'bot', timestamp: new Date() }
   ]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -43,35 +49,73 @@ export default function FloatingChatBot() {
     setIsTyping(true);
 
     try {
-      const fetchResponse = await fetch(`${getApiBaseUrl()}/.netlify/functions/ai_chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: currentInput,
-          documentation: USER_DOCUMENTATION,
-        }),
-      });
+      // Enforce cooldown to prevent rate limit exhaustion
+      const now = Date.now();
+      const timeSinceLastRequest = now - lastRequestTime;
+      if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
+        const waitSeconds = Math.ceil((MIN_REQUEST_INTERVAL - timeSinceLastRequest) / 1000);
+        const cooldownMsg: Message = {
+          id: (Date.now() + 1).toString(),
+          text: `Please wait ${waitSeconds} second${waitSeconds > 1 ? 's' : ''} before asking another question. This helps keep the service free for everyone.`,
+          sender: 'bot',
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, cooldownMsg]);
+        return;
+      }
 
-      const json = await fetchResponse.json();
-      if (!fetchResponse.ok) {
-        throw new Error(json.error || 'AI request failed');
+      lastRequestTime = Date.now();
+
+      // Use Netlify serverless function (API key stays server-side)
+      const apiBase = getApiBaseUrl();
+      let responseText = '';
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const res = await fetch(`${apiBase}/.netlify/functions/ai_chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: currentInput, documentation: USER_DOCUMENTATION }),
+          });
+          if (!res.ok) {
+            const errText = await res.text();
+            const is503 = res.status === 503 || errText.includes('503');
+            if (is503 && attempt < 2) {
+              const delay = Math.pow(2, attempt + 1) * 2000;
+              await new Promise(r => setTimeout(r, delay));
+              continue;
+            }
+            throw new Error(`AI service error (${res.status})`);
+          }
+          const data = await res.json();
+          responseText = data.result || '';
+          break;
+        } catch (err: any) {
+          const is503 = err?.message?.includes('503') || err?.message?.includes('high demand');
+          if (is503 && attempt < 2) {
+            const delay = Math.pow(2, attempt + 1) * 2000;
+            await new Promise(r => setTimeout(r, delay));
+            continue;
+          }
+          throw err;
+        }
       }
 
       const botMsg: Message = {
         id: (Date.now() + 1).toString(),
-        text: json.result || "I'm sorry, I'm having trouble connecting right now. Please try again later.",
+        text: responseText || "I'm sorry, I couldn't think of an answer. Try again?",
         sender: 'bot',
         timestamp: new Date()
       };
 
       setMessages(prev => [...prev, botMsg]);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Gemini Error:", error);
+      const is429 = error?.status === 429 || error?.message?.includes('429') || error?.message?.includes('Quota exceeded');
       const errorMsg: Message = {
         id: (Date.now() + 1).toString(),
-        text: "I'm sorry, I encountered an error. Please check your internet connection.",
+        text: is429
+          ? "I've reached my daily question limit. Please try again in a few minutes, or contact support if this persists."
+          : "I'm sorry, I ran into a problem. Please check your internet connection and try again.",
         sender: 'bot',
         timestamp: new Date()
       };

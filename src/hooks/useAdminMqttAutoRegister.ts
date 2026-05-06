@@ -12,7 +12,8 @@ type HostDoc = {
 // Global registry to prevent duplicate bridge connections
 const globalBridgeClients = new Map<string, MqttClient>();
 let lastStatusUpdate = 0;
-const STATUS_UPDATE_INTERVAL = 30000; // Only update status every 30 seconds
+const STATUS_UPDATE_INTERVAL = 120000; // Only update status every 2 minutes
+const lastForwardedMessages = new Map<string, { timestamp: number }>();
 
 function normalizeBrokerInput(input: string) {
   const raw = input.trim();
@@ -73,6 +74,7 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
     const start = async () => {
       setStatus('connecting');
       console.log('[MQTT Bridge] Starting with mqtt_hosts URLs + super-user env credentials...');
+      console.log('[MQTT Bridge] Bridge enabled:', enabled);
 
       const mqttUser = (import.meta.env.VITE_MQTT_USER as string | undefined)?.trim() || '';
       const mqttPass = (import.meta.env.VITE_MQTT_PASS as string | undefined)?.trim() || '';
@@ -206,13 +208,17 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
         });
 
         client.on('message', async (topic, message) => {
+          let parsedPayload: any;
           try {
             const parts = topic.split('/');
             if (parts.length < 2 || parts[0] !== 'devices') return;
-            const deviceId = parts[1].trim().toUpperCase();
+            const deviceId = parts[1].trim(); // Preserve original case
             if (!deviceId) return;
             const channel = (parts[2] || '').toLowerCase();
-            console.log(`[MQTT Bridge] Message: ${topic} -> ${deviceId}`);
+            // Reduce console logging for performance
+            if (Math.random() < 0.1) { // Log only 10% of messages
+              console.log(`[MQTT Bridge] Message: ${topic} -> ${deviceId}`);
+            }
 
             // Only update bridge status every 30 seconds to prevent Firestore write limits
             const now = Date.now();
@@ -231,38 +237,43 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
               lastStatusUpdate = now;
             }
 
-            let payload: any = null;
-            try {
-              payload = JSON.parse(message.toString());
+try {
+              parsedPayload = JSON.parse(message.toString());
             } catch {
-              payload = { raw: message.toString() };
+              parsedPayload = { raw: message.toString() };
             }
 
-            // Devices MUST be stored at docId == device_id for the user app flows
-            // (CreateAccount/AddDevice/ConfirmToken all read doc(db,'devices', deviceId)).
-            const deviceRef = doc(db, 'devices', deviceId);
-            const existing = await getDoc(deviceRef);
+            // Only write to Firestore for new devices or every 5 minutes
+            // This prevents quota exhaustion from writing on every MQTT message
+            const isNewDevice = !knownDeviceIdsRef.current.has(deviceId);
+            const lastDeviceWrite = lastForwardedMessages.get(`device_${deviceId}`);
+            const DEVICE_WRITE_INTERVAL = 300000; // 5 minutes
 
-            const token = existing.exists() ? (existing.data() as any)?.token : randomToken32();
-            const firstRegisteredAt = existing.exists() ? (existing.data() as any)?.registered_at : serverTimestamp();
-            const isNewDevice = !existing.exists() && !knownDeviceIdsRef.current.has(deviceId);
+            if (isNewDevice || !lastDeviceWrite || (Date.now() - lastDeviceWrite.timestamp > DEVICE_WRITE_INTERVAL)) {
+              const deviceRef = doc(db, 'devices', deviceId);
+              const existing = await getDoc(deviceRef);
 
-            await setDoc(
-              deviceRef,
-              {
-                device_id: deviceId,
-                token,
-                status: (existing.exists() ? (existing.data() as any)?.status : 'unassigned') || 'unassigned',
-                registered_at: firstRegisteredAt || serverTimestamp(),
-                mqtt_broker: normalizeBrokerInput(host.url || ''),
-                mqtt_username: mqttUser || null,
-                mqtt_password: mqttPass || null,
-                mqtt_topic: deviceId,
-                last_seen: serverTimestamp(),
-              },
-              { merge: true }
-            );
-            if (isNewDevice) knownDeviceIdsRef.current.add(deviceId);
+              const token = existing.exists() ? (existing.data() as any)?.token : randomToken32();
+              const firstRegisteredAt = existing.exists() ? (existing.data() as any)?.registered_at : serverTimestamp();
+
+              await setDoc(
+                deviceRef,
+                {
+                  device_id: deviceId,
+                  token,
+                  status: (existing.exists() ? (existing.data() as any)?.status : 'unassigned') || 'unassigned',
+                  registered_at: firstRegisteredAt || serverTimestamp(),
+                  mqtt_broker: normalizeBrokerInput(host.url || ''),
+                  mqtt_username: mqttUser || null,
+                  mqtt_password: mqttPass || null,
+                  mqtt_topic: deviceId,
+                  last_seen: serverTimestamp(),
+                },
+                { merge: true }
+              );
+              if (isNewDevice) knownDeviceIdsRef.current.add(deviceId);
+              lastForwardedMessages.set(`device_${deviceId}`, { timestamp: Date.now() });
+            }
 
             // Keep wildcard visibility for all device topics, but write telemetry
             // only for telemetry/data channels to avoid command payload pollution.
@@ -270,44 +281,45 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
               return;
             }
 
-            // Skip redundant bridge status updates - only update on new device registration
-            // This prevents excessive Firestore writes
+            // Write telemetry to Firestore every 30 seconds for B2B analytics
+            // (water usage, pump peak hours, power usage)
+            const TELEMETRY_WRITE_INTERVAL = 30000; // 30 seconds
+            const lastTelemetryWrite = lastForwardedMessages.get(`telemetry_${deviceId}`);
+            if (!lastTelemetryWrite || (Date.now() - lastTelemetryWrite.timestamp > TELEMETRY_WRITE_INTERVAL)) {
+              try {
+                await addDoc(collection(db, 'devices', deviceId, 'telemetry'), {
+                  ...parsedPayload,
+                  timestamp: serverTimestamp(),
+                  device_id: deviceId,
+                });
+                lastForwardedMessages.set(`telemetry_${deviceId}`, { timestamp: Date.now() });
+              } catch (telemetryErr) {
+                // Don't fail the whole handler if telemetry write fails
+                console.warn('[MQTT Bridge] Telemetry write skipped:', telemetryErr);
+              }
+            }
 
-            // Store telemetry snapshot
-            await addDoc(collection(db, 'devices', deviceId, 'telemetry'), {
-              recorded_at: serverTimestamp(),
-              overhead_level: payload?.overhead_level ?? null,
-              underground_level: payload?.underground_level ?? null,
-              pump_status: payload?.pump_status ?? null,
-              pump_current: payload?.pump_current ?? null,
-              system_status: payload?.system_status ?? null,
-              source: 'mqtt',
-            });
-
-            // Update live fields on device doc (so admin list can show)
-            await setDoc(
-              deviceRef,
-              {
-              overhead_level: payload?.overhead_level ?? null,
-              underground_level: payload?.underground_level ?? null,
-              pump_status: payload?.pump_status ?? null,
-              current_draw: payload?.pump_current ? Number(payload.pump_current) : null,
-              error_state: payload?.system_status ?? null,
-              },
-              { merge: true }
-            );
+            // Forward ESP32 data to dashboard by publishing to the same topic
+            // This allows the dashboard to receive real ESP32 data via the bridge
+            
+            // Only forward if this is a new message (avoid duplicates)
+            const messageKey = `${deviceId}_${JSON.stringify(parsedPayload)}`;
+            const messageTime = Date.now();
+            const lastForwarded = lastForwardedMessages.get(messageKey);
+            
+            if (!lastForwarded || (messageTime - lastForwarded.timestamp > 1000)) {
+              // Forward this message
+              const forwardTopic = `devices/${deviceId}/data`;
+              if (client && parsedPayload) {
+                client.publish(forwardTopic, JSON.stringify(parsedPayload), { qos: 0 });
+              }
+              
+              // Track this message to prevent duplicates
+              lastForwardedMessages.set(messageKey, { timestamp: messageTime });
+            }
           } catch (e) {
             console.error('Admin bridge message handling failed:', e);
-            await setDoc(
-              doc(db, 'system', 'bridge_status'),
-              {
-                last_seen: serverTimestamp(),
-                source: 'admin-pwa',
-                status: 'message_error',
-                last_error: (e as Error)?.message || 'message_handler_failed',
-              },
-              { merge: true }
-            );
+            // Skip Firestore writes - just log the error
           }
         });
       });

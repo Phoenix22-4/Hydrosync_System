@@ -343,6 +343,34 @@ export default function AdminSettings() {
     }
   };
 
+  const clearAllAlerts = async () => {
+    if (!confirm('Are you sure you want to delete ALL alerts? This cannot be undone.')) return;
+    try {
+      setLoading(true);
+      await deleteCollection('alerts');
+      alert('All alerts cleared successfully');
+    } catch (error) {
+      console.error('Error clearing alerts:', error);
+      alert(`Failed to clear alerts: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const clearAllActivityLog = async () => {
+    if (!confirm('Are you sure you want to delete ALL activity logs? This cannot be undone.')) return;
+    try {
+      setLoading(true);
+      await deleteCollection('activity_log');
+      alert('All activity logs cleared successfully');
+    } catch (error) {
+      console.error('Error clearing activity log:', error);
+      alert(`Failed to clear activity log: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const clearAllTelemetry = async () => {
     if (!confirm('Are you sure you want to clear all telemetry data? This cannot be undone.')) return;
     try {
@@ -885,6 +913,8 @@ export default function AdminSettings() {
                         </div>
                       </div>
                       <div className="mt-4 space-y-2">
+                        <SettingsButton icon={<Trash2 className="w-4 h-4" />} label="Clear All Alerts" danger onClick={clearAllAlerts} loading={loading} />
+                        <SettingsButton icon={<Trash2 className="w-4 h-4" />} label="Clear All Activity Logs" danger onClick={clearAllActivityLog} loading={loading} />
                         <SettingsButton icon={<Trash2 className="w-4 h-4" />} label="Clear All Telemetry" danger onClick={clearAllTelemetry} loading={loading} />
                         <SettingsButton icon={<Trash2 className="w-4 h-4" />} label="Reset System" danger onClick={resetSystem} loading={loading} />
                         {profile?.role === 'superuser' && (

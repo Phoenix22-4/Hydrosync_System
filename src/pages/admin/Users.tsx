@@ -344,8 +344,8 @@ export default function AdminUsers() {
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex flex-wrap gap-1">
-                            {u.device_ids?.map(id => (
-                              <span key={id} className="px-1.5 py-0.5 bg-cyan-500/10 border border-cyan-500/20 text-cyan-500 text-[9px] font-bold rounded uppercase tracking-tighter">{id}</span>
+                            {u.device_ids?.filter(Boolean).map((id, di) => (
+                              <span key={id || `dev-${di}`} className="px-1.5 py-0.5 bg-cyan-500/10 border border-cyan-500/20 text-cyan-500 text-[9px] font-bold rounded uppercase tracking-tighter">{id}</span>
                             )) || <span className="text-[10px] text-slate-600 italic">None</span>}
                           </div>
                         </td>

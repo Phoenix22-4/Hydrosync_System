@@ -42,6 +42,8 @@ export default function Dashboard() {
   const [fallbackBroker, setFallbackBroker] = useState<string | null>(null);
   // Track last telemetry update timestamp for real-time sync
   const lastTelemetryUpdateRef = useRef<number>(Date.now());
+  // Rate limiting to prevent performance issues
+  const lastUpdateTimeRef = useRef<number>(0);
   // 5-second heartbeat: tracks whether the IoT device is actively sending data
   const heartbeatTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [deviceHeartbeatAlive, setDeviceHeartbeatAlive] = useState<boolean | null>(null); // null = waiting for first data
@@ -101,25 +103,29 @@ export default function Dashboard() {
         const targetTopicId = targetDevice.mqtt_topic || targetDevice.device_id || targetDevice.id;
 
         if (topicLc === `devices/${targetTopicId.toLowerCase()}/data`) {
-          // Update telemetry with live data - mark timestamp for real-time tracking
+          // Rate limiting: only update if more than 9 seconds since last update
+          // This matches ESP32's 10-second sending interval to avoid confusion
           const now = Date.now();
+          if (now - lastUpdateTimeRef.current < 9000) return;
+          lastUpdateTimeRef.current = now;
           lastTelemetryUpdateRef.current = now;
           
-          // Reset 5-second heartbeat timer — device is alive
+          // Reset heartbeat timer — device is alive
           if (heartbeatTimerRef.current) clearTimeout(heartbeatTimerRef.current);
           setDeviceHeartbeatAlive(true);
           heartbeatTimerRef.current = setTimeout(() => {
-            // 5 seconds elapsed with no data — device is offline
+            // 20 seconds elapsed with no data — device is offline
             setDeviceHeartbeatAlive(false);
-          }, 5000);
+          }, 20000);
           
+          // Use exactly what ESP32 firmware sends - no fallbacks to avoid confusion
           setTelemetry({
             recorded_at: { seconds: Math.floor(now / 1000), nanoseconds: (now % 1000) * 1000000 } as any,
-            overhead_level: payload.overhead_level ?? telemetry?.overhead_level ?? 50,
-            underground_level: payload.underground_level ?? telemetry?.underground_level ?? 50,
-            pump_status: payload.pump_status ?? telemetry?.pump_status ?? false,
-            pump_current: parseFloat(payload.pump_current) || telemetry?.pump_current || 0,
-            system_status: payload.system_status || telemetry?.system_status || 'System Ready',
+            overhead_level: payload.overhead_level,
+            underground_level: payload.underground_level,
+            pump_status: payload.pump_status,
+            pump_current: parseFloat(payload.pump_current),
+            system_status: payload.system_status,
           });
 
           // Update device status in Firestore
@@ -154,6 +160,30 @@ export default function Dashboard() {
   // ── Fetch devices ────────────────────────────────────
   useEffect(() => {
     if (!user) return;
+    // Skip Firestore listeners in test mode
+    if (import.meta.env.VITE_TEST_MODE === 'true') {
+      console.log('TEST MODE: Skipping Firestore device listeners');
+      // Mock device for testing
+      setDevices([{
+        id: 'HydroSync_01',
+        device_id: 'HydroSync_01',
+        mqtt_broker: '70f11a2fa15842628bf9227997bb4ba9.s1.eu.hivemq.cloud:8884',
+        mqtt_username: 'hydrosync_admin',
+        mqtt_password: 'IOTstartup2026@vision!',
+        mqtt_topic: 'HydroSync_01',
+        status: 'active',
+        assigned_to_user: user.uid,
+        name: 'HydroSync Device',
+        token: 'TEST_TOKEN_123',
+        ohCap: 2000, // 2000 litres overhead tank
+        ugCap: 5000, // 5000 litres underground tank
+        region: 'Nairobi',
+        registered_at: { seconds: Math.floor(Date.now() / 1000), nanoseconds: 0 } as any,
+        last_seen: { seconds: Math.floor(Date.now() / 1000), nanoseconds: 0 } as any,
+      }]);
+      setLoading(false);
+      return;
+    }
     const q = query(collection(db, 'devices'), where('assigned_to_user', '==', user.uid));
     return onSnapshot(q, (snap) => {
       const devs = snap.docs.map(d => ({ id: d.id, ...d.data() } as Device));
@@ -177,6 +207,12 @@ export default function Dashboard() {
   }, [user, activeDeviceIdx]);
 
   useEffect(() => {
+    // Skip Firestore listeners in test mode
+    if (import.meta.env.VITE_TEST_MODE === 'true') {
+      console.log('TEST MODE: Skipping Firestore mqtt_hosts listener');
+      setFallbackBroker('70f11a2fa15842628bf9227997bb4ba9.s1.eu.hivemq.cloud:8884');
+      return;
+    }
     const q = query(collection(db, 'mqtt_hosts'), where('status', '==', 'active'));
     return onSnapshot(q, (snapshot) => {
       if (snapshot.empty) {
@@ -232,6 +268,24 @@ export default function Dashboard() {
   // ── Telemetry listener ────────────────────────────────
   useEffect(() => {
     if (!activeDevice) return;
+    
+    // Skip Firestore listeners in test mode - use real MQTT data
+    if (import.meta.env.VITE_TEST_MODE === 'true') {
+      console.log('TEST MODE: Using real ESP32 MQTT data (no mock)');
+      
+      // Set initial telemetry to avoid zeros while waiting for real data
+      setTelemetry({
+        recorded_at: { seconds: Math.floor(Date.now() / 1000), nanoseconds: 0 } as any,
+        overhead_level: 50,
+        underground_level: 50,
+        pump_status: false,
+        pump_current: 0.0,
+        system_status: 'Waiting for ESP32...',
+      });
+      
+      return; // Exit early, no mock data updates
+    }
+    
     const q = query(
       collection(db, 'devices', activeDevice.id, 'telemetry'),
       orderBy('recorded_at', 'desc'),
@@ -306,6 +360,14 @@ export default function Dashboard() {
   // ── Activity logs ─────────────────────────────────────
   useEffect(() => {
     if (!activeDevice) return;
+    
+    // Skip Firestore listeners in test mode
+    if (import.meta.env.VITE_TEST_MODE === 'true') {
+      console.log('TEST MODE: Skipping Firestore activity logs listener');
+      setLogs([]); // Empty logs in test mode
+      return;
+    }
+    
     const q = query(
       collection(db, 'activity_log'),
       where('device_id', '==', activeDevice.device_id),
@@ -320,6 +382,14 @@ export default function Dashboard() {
   // ── Unread alerts badge ───────────────────────────────
   useEffect(() => {
     if (!user) return;
+    
+    // Skip Firestore listeners in test mode
+    if (import.meta.env.VITE_TEST_MODE === 'true') {
+      console.log('TEST MODE: Skipping Firestore alerts listener');
+      setUnreadAlerts(0); // No alerts in test mode
+      return;
+    }
+    
     const q = query(
       collection(db, 'alerts'),
       where('user_id', '==', user.uid),
@@ -369,22 +439,8 @@ export default function Dashboard() {
   const sendCommand = useCallback(async (cmd: string) => {
     if (!activeDevice || !user) return;
     try {
-      await addDoc(collection(db, 'activity_log'), {
-        timestamp:    serverTimestamp(),
-        device_id:   activeDevice.id,
-        user_id:     user.uid,
-        action:      `Manual command: ${cmd} initiated`,
-        performed_by: user.email ?? 'user',
-      });
-
-      await addDoc(collection(db, 'commands'), {
-        device_id:  activeDevice.id,
-        command:    cmd,
-        payload:    cmd === 'PUMP_ON' ? { state: true } : cmd === 'PUMP_OFF' ? { state: false } : {},
-        status:     'pending',
-        created_at: serverTimestamp(),
-        user_id:    user.uid,
-      });
+      // Skip Firestore writes - send command directly via MQTT only
+      console.log(`Sending command via MQTT: ${cmd}`);
 
       if (mqttConnected) {
         // Use the persistent MQTT connection
@@ -497,7 +553,7 @@ export default function Dashboard() {
             <span className="text-[10px] font-bold uppercase tracking-widest">
               {isOffline ? 'Offline' : 'Live'}
             </span>
-            {!isOffline && <span className="text-[8px] text-slate-500 ml-1">5s heartbeat</span>}
+            {!isOffline && <span className="text-[8px] text-slate-500 ml-1">10s heartbeat</span>}
           </div>
         </div>
       </header>
@@ -507,7 +563,7 @@ export default function Dashboard() {
         {/* Device tabs */}
         {devices.map((dev, i) => (
           <button
-            key={dev.id}
+            key={dev.id || `dev-${i}`}
             type="button"
             onClick={() => setActiveDeviceIdx(i)}
             className={cn(
@@ -764,7 +820,8 @@ export default function Dashboard() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-[#0f172a] flex flex-col items-center justify-center p-6"
+            className="fixed inset-0 z-50 bg-[#0f172a] flex flex-col items-center justify-center p-6 overflow-y-auto"
+            style={{ overscrollBehavior: 'contain' }}
           >
             <div className="w-16 h-16 bg-cyan-500/10 rounded-2xl flex items-center justify-center mb-6">
               <img src="/icon.png" alt="HydroSync" className="w-10 h-10" />

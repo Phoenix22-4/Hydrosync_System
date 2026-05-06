@@ -8,6 +8,10 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Pass-through for now, but required for PWA
-  event.respondWith(fetch(event.request));
+  // Pass-through with error handling for PWA
+  event.respondWith(
+    fetch(event.request).catch(() => {
+      return new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
+    })
+  );
 });
