@@ -193,19 +193,23 @@ service cloud.firestore {
     }
 
     match /devices/{deviceId} {
+      // Allow authenticated users to read devices assigned to them
       allow read: if isAdmin() || (
-        isAuthenticated() && 
+        isAuthenticated() &&
+        ('assigned_to_user' in resource.data) &&
         resource.data.assigned_to_user == request.auth.uid
       );
+      allow list: if isAdmin() || (isAuthenticated() && request.query.limit <= 100);
       allow create: if isAdmin();
       allow update: if isAdmin() || (
-        isAuthenticated() && 
+        isAuthenticated() &&
         (resource.data.status == 'unassigned' || resource.data.status == 'pending_confirmation') &&
         request.resource.data.assigned_to_user == request.auth.uid &&
         request.resource.data.status in ['pending_confirmation', 'active'] &&
         !hasReachedDeviceLimit(request.auth.uid)
       ) || (
-        isAuthenticated() && 
+        isAuthenticated() &&
+        'assigned_to_user' in resource.data &&
         resource.data.assigned_to_user == request.auth.uid &&
         resource.data.status == 'active' &&
         request.resource.data.status == 'active'
@@ -221,14 +225,11 @@ service cloud.firestore {
     }
 
     match /devices/{deviceId}/telemetry/{telemetryId} {
-      allow read: if isAdmin() || (
-        isAuthenticated() && 
+      // Allow authenticated users to read telemetry for their assigned devices
+      allow read, list: if isAdmin() || (
+        isAuthenticated() &&
         exists(/databases/$(database)/documents/devices/$(deviceId)) &&
-        get(/databases/$(database)/documents/devices/$(deviceId)).data.assigned_to_user == request.auth.uid
-      );
-      allow list: if isAdmin() || (
-        isAuthenticated() && 
-        exists(/databases/$(database)/documents/devices/$(deviceId)) &&
+        'assigned_to_user' in get(/databases/$(database)/documents/devices/$(deviceId)).data &&
         get(/databases/$(database)/documents/devices/$(deviceId)).data.assigned_to_user == request.auth.uid
       );
       allow create: if isAdmin();
@@ -237,14 +238,11 @@ service cloud.firestore {
     }
 
     match /devices/{deviceId}/pump_events/{eventId} {
-      allow read: if isAdmin() || (
-        isAuthenticated() && 
+      // Allow authenticated users to read pump events for their assigned devices
+      allow read, list: if isAdmin() || (
+        isAuthenticated() &&
         exists(/databases/$(database)/documents/devices/$(deviceId)) &&
-        get(/databases/$(database)/documents/devices/$(deviceId)).data.assigned_to_user == request.auth.uid
-      );
-      allow list: if isAdmin() || (
-        isAuthenticated() && 
-        exists(/databases/$(database)/documents/devices/$(deviceId)) &&
+        'assigned_to_user' in get(/databases/$(database)/documents/devices/$(deviceId)).data &&
         get(/databases/$(database)/documents/devices/$(deviceId)).data.assigned_to_user == request.auth.uid
       );
       allow create: if isAdmin();
@@ -265,8 +263,8 @@ service cloud.firestore {
     }
 
     match /alerts/{alertId} {
-      // Admins can read all; users can read own alerts or list with limit
-      allow get: if isAdmin() || (isAuthenticated() && resource.data.user_id == request.auth.uid);
+      // Allow authenticated users to read/write their own alerts
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.user_id == request.auth.uid);
       allow list: if isAdmin() || (isAuthenticated() && request.query.limit <= 100);
       allow update: if isAuthenticated() && resource.data.user_id == request.auth.uid &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'read_at']);

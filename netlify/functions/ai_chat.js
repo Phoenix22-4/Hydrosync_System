@@ -63,7 +63,7 @@ export const handler = async (event) => {
     const data = await response.json();
     const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
-    return { statusCode: 200, headers, body: JSON.stringify({ result: resultText }) };
+    return { statusCode: 200, headers, body: JSON.stringify({ reply: resultText }) };
   } catch (error) {
     console.error('AI function error:', error.message || error);
     return { statusCode: 500, headers, body: JSON.stringify({ error: `Failed to generate AI response: ${error.message || 'Unknown error'}` }) };
