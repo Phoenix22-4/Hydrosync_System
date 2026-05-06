@@ -17,8 +17,10 @@ import {
   Linkedin,
   Users,
   CheckCircle2,
-  LogIn
+  LogIn,
+  QrCode
 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../App';
@@ -798,6 +800,23 @@ export default function LandingPage() {
                     <Zap className="w-4 h-4" />
                     Download APK (Latest)
                   </a>
+                </div>
+
+                <div className="p-6 bg-white/5 border border-white/10 rounded-3xl">
+                  <h4 className="text-white font-bold mb-2 flex items-center gap-2">
+                    <QrCode className="w-4 h-4 text-cyan-500" />
+                    Quick Access
+                  </h4>
+                  <p className="text-slate-400 text-sm mb-4">Scan this QR code to quickly access HydroSync on your device.</p>
+                  <div className="flex justify-center bg-white p-4 rounded-xl">
+                    <QRCodeSVG 
+                      value="https://hydrosyncv3-ke.netlify.app" 
+                      size={150}
+                      level="H"
+                      includeMargin={false}
+                    />
+                  </div>
+                  <p className="text-slate-500 text-xs mt-3 text-center">hydrosyncv3-ke.netlify.app</p>
                 </div>
               </div>
             </div>
