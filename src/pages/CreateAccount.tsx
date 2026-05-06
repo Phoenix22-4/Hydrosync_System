@@ -289,7 +289,7 @@ export default function CreateAccount() {
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-bold text-cyan-500 uppercase tracking-wider ml-1">Device ID (Optional for Admin)</label>
+            <label className="text-xs font-bold text-cyan-500 uppercase tracking-wider ml-1">Device ID</label>
             <div className="relative group">
               <Smartphone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-cyan-500 transition-colors" />
               <input

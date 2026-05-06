@@ -156,6 +156,13 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Connection test collection - allow public read for testing
+    match /_system_/{docId} {
+      allow read: if true;
+      allow write: if false;
+      allow delete: if false;
+    }
+
     match /aggregate_hourly/{hourId} {
       allow read: if true;
       allow write: if isAdmin();
@@ -186,7 +193,10 @@ service cloud.firestore {
     }
 
     match /devices/{deviceId} {
-      allow read: if true;
+      allow read: if isAdmin() || (
+        isAuthenticated() && 
+        resource.data.assigned_to_user == request.auth.uid
+      );
       allow create: if isAdmin();
       allow update: if isAdmin() || (
         isAuthenticated() && 

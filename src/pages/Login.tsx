@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../firebase';
 import { motion } from 'motion/react';
 import { Mail, Lock, Eye, EyeOff, AlertCircle, Loader2, ArrowLeft } from 'lucide-react';
@@ -13,7 +13,22 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [checkingAuth, setCheckingAuth] = useState(true);
   const navigate = useNavigate();
+
+  // Check if already logged in - only auto-redirect on native APK, not desktop
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user && Capacitor.isNativePlatform()) {
+        // On APK: Already logged in, go to dashboard directly
+        navigate('/dashboard', { replace: true });
+      } else {
+        // On desktop: Stay on login page even if logged in (user clicked Login button)
+        setCheckingAuth(false);
+      }
+    });
+    return () => unsubscribe();
+  }, [navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,6 +85,16 @@ export default function Login() {
     }
   };
 
+  // Show loading screen while checking if already logged in
+  if (checkingAuth) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-[#0f172a]">
+        <Loader2 className="w-8 h-8 animate-spin text-cyan-400" />
+        <p className="mt-4 text-slate-400 text-sm">Loading...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-6 bg-[#0f172a] relative">
       {!Capacitor.isNativePlatform() && (
@@ -118,6 +143,7 @@ export default function Login() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="josphat@email.com"
                 required
+                autoComplete="username email"
                 className="w-full bg-[#1a2234] border border-white/5 rounded-xl py-3.5 pl-12 pr-4 text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all"
               />
             </div>
@@ -142,6 +168,7 @@ export default function Login() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 required
+                autoComplete="current-password"
                 className="w-full bg-[#1a2234] border border-white/5 rounded-xl py-3.5 pl-12 pr-12 text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all"
               />
               <button

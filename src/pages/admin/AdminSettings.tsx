@@ -675,7 +675,7 @@ export default function AdminSettings() {
                         type="text"
                           value={newHostUrl}
                           onChange={(e) => setNewHostUrl(e.target.value)}
-                          placeholder="70f11a2fa15842628bf9227997bb4ba9.s1.eu.hivemq.cloud"
+                          placeholder="your-broker.s1.eu.hivemq.cloud:8884"
                           className="bg-[#1a2234] border border-white/5 rounded-lg px-3 py-2 text-white text-sm w-full"
                         />
                         <input
@@ -745,7 +745,7 @@ export default function AdminSettings() {
                                   value={editForm.url}
                                   onChange={(e) => setEditForm(prev => ({ ...prev, url: e.target.value }))}
                                   className="flex-1 bg-[#0f172a] border border-white/5 rounded-lg px-3 py-2 text-white text-sm"
-                                  placeholder="70f11a2fa15842628bf9227997bb4ba9.s1.eu.hivemq.cloud:8884/mqtt"
+                                  placeholder="your-broker.s1.eu.hivemq.cloud:8884"
                                 />
                                 <input
                                   type="text"
@@ -854,7 +854,7 @@ export default function AdminSettings() {
                         <Globe className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
                         <div>
                           <p className="text-sm font-bold text-blue-400">MQTT Configuration</p>
-                          <p className="text-xs text-slate-500 mt-1">Use format like 70f11a2fa15842628bf9227997bb4ba9.s1.eu.hivemq.cloud:8884/mqtt. The app auto-normalizes host input and uses device-specific host first, then global fallback.</p>
+                          <p className="text-xs text-slate-500 mt-1">Use format like your-broker.s1.eu.hivemq.cloud:8884. The app auto-normalizes host input and uses device-specific host first, then global fallback.</p>
                         </div>
                       </div>
                     </div>

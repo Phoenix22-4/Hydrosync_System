@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, Send, MessageSquare, Droplets, Info, HelpCircle, AlertCircle, Smartphone, Loader2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { USER_DOCUMENTATION } from '../constants/docs';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 
 interface Message {
   id: string;
@@ -13,9 +12,10 @@ interface Message {
   timestamp: Date;
 }
 
-const SYSTEM_PROMPT = `You are HydroSync AI, a friendly water system assistant. You help people understand their water tank levels, pump status, and fix problems. Talk like a helpful neighbour — simple, clear, and practical. Keep answers short. If someone asks something unrelated, help but gently guide them back to water systems.\n\nWhat you know about HydroSync:\n${USER_DOCUMENTATION}`;
+// Use Netlify serverless function for AI chat (server-side API key)
+const AI_CHAT_ENDPOINT = '/.netlify/functions/ai_chat';
 
-// Cooldown to prevent hitting Gemini free tier rate limits
+// Cooldown to prevent hitting rate limits
 let lastRequestTime = 0;
 const MIN_REQUEST_INTERVAL = 10000; // 10 seconds between requests
 
@@ -65,52 +65,41 @@ export default function ChatBot() {
         return;
       }
 
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) {
-        throw new Error('Gemini API key not configured. Set VITE_GEMINI_API_KEY in .env');
-      }
+      lastRequestTime = Date.now();
 
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({
-        model: 'gemini-2.5-flash',
-        systemInstruction: SYSTEM_PROMPT,
+      // Call Netlify serverless function instead of direct Gemini API
+      const response = await fetch(AI_CHAT_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: currentInput })
       });
 
-      lastRequestTime = Date.now();
-      // Retry up to 3 times for 503 (server overloaded) errors
-      let responseText = '';
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          const result = await model.generateContent(currentInput);
-          responseText = result.response.text();
-          break;
-        } catch (err: any) {
-          const is503 = err?.message?.includes('503') || err?.message?.includes('high demand');
-          if (is503 && attempt < 2) {
-            const delay = Math.pow(2, attempt + 1) * 2000; // 4s, 8s
-            await new Promise(r => setTimeout(r, delay));
-            continue;
-          }
-          throw err;
-        }
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP ${response.status}`);
       }
+
+      const data = await response.json();
 
       const botMsg: Message = {
         id: (Date.now() + 1).toString(),
-        text: responseText || "I'm sorry, I couldn't think of an answer. Try again?",
+        text: data.reply || "I'm sorry, I couldn't think of an answer. Try again?",
         sender: 'bot',
         timestamp: new Date()
       };
 
       setMessages(prev => [...prev, botMsg]);
     } catch (error: any) {
-      console.error("Gemini Error:", error);
-      const is429 = error?.status === 429 || error?.message?.includes('429') || error?.message?.includes('Quota exceeded');
+      console.error("AI Chat Error:", error);
+      const is429 = error?.message?.includes('429') || error?.message?.includes('quota');
+      const is503 = error?.message?.includes('503') || error?.message?.includes('high demand');
       const errorMsg: Message = {
         id: (Date.now() + 1).toString(),
         text: is429
           ? "I've reached my daily question limit. Please try again in a few minutes, or contact support if this persists."
-          : "I'm sorry, I ran into a problem. Please check your internet connection and try again.",
+          : is503
+            ? "The AI service is temporarily busy. Please try again in a moment."
+            : "I'm sorry, I ran into a problem. Please check your internet connection and try again.",
         sender: 'bot',
         timestamp: new Date()
       };

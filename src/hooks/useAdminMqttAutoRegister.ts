@@ -60,6 +60,7 @@ function extractDeviceIdFromTopic(topic: string): { canonicalId: string; topicId
 
 export function useAdminMqttAutoRegister(enabled: boolean) {
   const [status, setStatus] = useState<'offline' | 'connecting' | 'online' | 'no_hosts'>('offline');
+  const [lastMessageAt, setLastMessageAt] = useState<number>(0); // timestamp of last MQTT message
   const clientsRef = useRef<MqttClient[]>([]);
   // Map: lowercase device_id -> actual Firestore doc ID (case-insensitive dedup)
   const knownDeviceIdsRef = useRef<Map<string, string>>(new Map());
@@ -216,29 +217,39 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
             const deviceId = parts[1].trim(); // Preserve original case
             if (!deviceId) return;
             const channel = (parts[2] || '').toLowerCase();
+            // Update local message timestamp for live/offline detection
+            setLastMessageAt(Date.now());
             // Reduce console logging for performance
             if (Math.random() < 0.1) { // Log only 10% of messages
               console.log(`[MQTT Bridge] Message: ${topic} -> ${deviceId}`);
             }
 
             // Only update bridge status every 30 seconds to prevent Firestore write limits
+            // Skip if not admin (will get permission denied)
             const now = Date.now();
             if (now - lastStatusUpdate > STATUS_UPDATE_INTERVAL) {
-              await setDoc(
-                doc(db, 'system', 'bridge_status'),
-                {
-                  last_seen: serverTimestamp(),
-                  source: 'admin-pwa',
-                  status: 'online',
-                  last_topic: topic,
-                  last_device_id: deviceId,
-                },
-                { merge: true }
-              );
-              lastStatusUpdate = now;
+              try {
+                await setDoc(
+                  doc(db, 'system', 'bridge_status'),
+                  {
+                    last_seen: serverTimestamp(),
+                    source: 'admin-pwa',
+                    status: 'online',
+                    last_topic: topic,
+                    last_device_id: deviceId,
+                  },
+                  { merge: true }
+                );
+                lastStatusUpdate = now;
+              } catch (statusErr) {
+                // Silently skip if not admin - this is expected for regular users
+                if ((statusErr as any)?.code !== 'permission-denied') {
+                  console.warn('[MQTT Bridge] Status update failed:', statusErr);
+                }
+              }
             }
 
-try {
+            try {
               parsedPayload = JSON.parse(message.toString());
             } catch {
               parsedPayload = { raw: message.toString() };
@@ -254,29 +265,44 @@ try {
             const DEVICE_WRITE_INTERVAL = 300000; // 5 minutes
 
             if (isNewDevice || !lastDeviceWrite || (Date.now() - lastDeviceWrite.timestamp > DEVICE_WRITE_INTERVAL)) {
-              const deviceRef = doc(db, 'devices', firestoreDocId);
-              const existing = await getDoc(deviceRef);
+              try {
+                const deviceRef = doc(db, 'devices', firestoreDocId);
+                const existing = await getDoc(deviceRef);
 
-              const token = existing.exists() ? (existing.data() as any)?.token : randomToken32();
-              const firstRegisteredAt = existing.exists() ? (existing.data() as any)?.registered_at : serverTimestamp();
-
-              await setDoc(
-                deviceRef,
-                {
-                  device_id: deviceId, // Always store the original case from MQTT
-                  token,
-                  status: (existing.exists() ? (existing.data() as any)?.status : 'unassigned') || 'unassigned',
-                  registered_at: firstRegisteredAt || serverTimestamp(),
-                  mqtt_broker: normalizeBrokerInput(host.url || ''),
-                  mqtt_username: mqttUser || null,
-                  mqtt_password: mqttPass || null,
-                  mqtt_topic: deviceId,
-                  last_seen: serverTimestamp(),
-                },
-                { merge: true }
-              );
-              if (isNewDevice) knownDeviceIdsRef.current.set(lowerDeviceId, firestoreDocId);
-              lastForwardedMessages.set(`device_${firestoreDocId}`, { timestamp: Date.now() });
+                // Extract existing data once
+                const existingData = existing.exists() ? (existing.data() as any) : null;
+                
+                const token = existingData?.token || randomToken32();
+                const firstRegisteredAt = existingData?.registered_at || serverTimestamp();
+                
+                // Preserve existing mqtt credentials
+                const existingMqttUser = existingData?.mqtt_username;
+                const existingMqttPass = existingData?.mqtt_password;
+                
+                await setDoc(
+                  deviceRef,
+                  {
+                    device_id: deviceId, // Always store the original case from MQTT
+                    token,
+                    status: existingData?.status || 'unassigned',
+                    registered_at: firstRegisteredAt || serverTimestamp(),
+                    mqtt_broker: normalizeBrokerInput(host.url || ''),
+                    // Only update credentials if new ones provided, otherwise preserve existing
+                    ...(mqttUser ? { mqtt_username: mqttUser } : existingMqttUser ? {} : { mqtt_username: null }),
+                    ...(mqttPass ? { mqtt_password: mqttPass } : existingMqttPass ? {} : { mqtt_password: null }),
+                    mqtt_topic: deviceId,
+                    last_seen: serverTimestamp(),
+                  },
+                  { merge: true }
+                );
+                if (isNewDevice) knownDeviceIdsRef.current.set(lowerDeviceId, firestoreDocId);
+                lastForwardedMessages.set(`device_${firestoreDocId}`, { timestamp: Date.now() });
+              } catch (deviceErr) {
+                // Silently skip if permission denied - device will exist in local state
+                if ((deviceErr as any)?.code !== 'permission-denied') {
+                  console.warn('[MQTT Bridge] Device write failed:', deviceErr);
+                }
+              }
             }
 
             // Keep wildcard visibility for all device topics, but write telemetry
@@ -285,9 +311,9 @@ try {
               return;
             }
 
-            // Write telemetry to Firestore every 30 seconds for B2B analytics
+            // Write telemetry to Firestore every 60 seconds to reduce quota usage
             // (water usage, pump peak hours, power usage)
-            const TELEMETRY_WRITE_INTERVAL = 30000; // 30 seconds
+            const TELEMETRY_WRITE_INTERVAL = 60000; // 60 seconds - reduces writes by 50%
             const telemetryDocId = knownDeviceIdsRef.current.get(lowerDeviceId) || deviceId;
             const lastTelemetryWrite = lastForwardedMessages.get(`telemetry_${telemetryDocId}`);
             if (!lastTelemetryWrite || (Date.now() - lastTelemetryWrite.timestamp > TELEMETRY_WRITE_INTERVAL)) {
@@ -300,7 +326,10 @@ try {
                 lastForwardedMessages.set(`telemetry_${telemetryDocId}`, { timestamp: Date.now() });
               } catch (telemetryErr) {
                 // Don't fail the whole handler if telemetry write fails
-                console.warn('[MQTT Bridge] Telemetry write skipped:', telemetryErr);
+                // Silence permission errors - expected for non-admin users
+                if ((telemetryErr as any)?.code !== 'permission-denied') {
+                  console.warn('[MQTT Bridge] Telemetry write skipped:', telemetryErr);
+                }
               }
             }
 
@@ -348,6 +377,6 @@ try {
     };
   }, [enabled]);
 
-  return { status };
+  return { status, lastMessageAt };
 }
 

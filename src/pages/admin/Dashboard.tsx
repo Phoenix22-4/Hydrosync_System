@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { collection, query, where, onSnapshot, getDocs, orderBy, limit, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, getDocs, orderBy, limit } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useAuth } from '../../App';
 import { Device, UserProfile, Alert } from '../../types';
 import { motion } from 'motion/react';
 import { Droplets, Users, Smartphone, Zap, Bell, ChevronRight, Activity, LayoutDashboard, Database, BarChart3, ClipboardList, Settings, RefreshCw, Loader2, Book } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { useAdminMqttAutoRegister } from '../../hooks/useAdminMqttAutoRegister';
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState({
@@ -20,10 +21,19 @@ export default function AdminDashboard() {
     alerts: 0,
     criticalAlerts: 0
   });
-  const [bridgeStatus, setBridgeStatus] = useState<'online' | 'offline' | 'loading'>('loading');
   const [recentAlerts, setRecentAlerts] = useState<Alert[]>([]);
   const { user, profile } = useAuth();
   const navigate = useNavigate();
+  const { status: mqttConnStatus, lastMessageAt } = useAdminMqttAutoRegister(!!user);
+
+  // Derive live/offline from actual MQTT data reception
+  const [isDataLive, setIsDataLive] = useState(false);
+  useEffect(() => {
+    if (!lastMessageAt) { setIsDataLive(false); return; }
+    setIsDataLive(true);
+    const timer = setTimeout(() => setIsDataLive(false), 25000);
+    return () => clearTimeout(timer);
+  }, [lastMessageAt]);
 
   useEffect(() => {
     if (!user) return;
@@ -74,20 +84,11 @@ export default function AdminDashboard() {
       setRecentAlerts(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Alert)));
     });
 
-    // Bridge status is driven by the global admin bridge (mounted in App.tsx).
-    // We derive a user-friendly status from the heartbeat document.
-    const unsubBridge = onSnapshot(doc(db, 'system', 'bridge_status'), (snap) => {
-      const lastSeen = snap.data()?.last_seen?.toMillis?.() ? snap.data().last_seen.toMillis() : 0;
-      const isOnline = lastSeen && Date.now() - lastSeen < 45000;
-      setBridgeStatus(isOnline ? 'online' : 'offline');
-    }, () => setBridgeStatus('offline'));
-
     return () => {
       unsubDevices();
       unsubUsers();
       unsubAlerts();
       unsubRecentAlerts();
-      unsubBridge();
     };
   }, [user]);
 
@@ -169,17 +170,17 @@ export default function AdminDashboard() {
             {/* Bridge Status */}
             <div className={cn(
               "flex items-center gap-2 px-3 py-1.5 border rounded-full transition-all",
-              bridgeStatus === 'online' ? "bg-green-500/10 border-green-500/20" : "bg-red-500/10 border-red-500/20"
+              isDataLive ? "bg-green-500/10 border-green-500/20" : "bg-red-500/10 border-red-500/20"
             )}>
               <div className={cn(
                 "w-1.5 h-1.5 rounded-full",
-                bridgeStatus === 'online' ? "bg-green-500 animate-pulse" : "bg-red-500"
+                isDataLive ? "bg-green-500 animate-pulse" : "bg-red-500"
               )} />
               <span className={cn(
                 "text-[10px] font-bold uppercase tracking-widest",
-                bridgeStatus === 'online' ? "text-green-500" : "text-red-500"
+                isDataLive ? "text-green-500" : "text-red-500"
               )}>
-                {bridgeStatus === 'online' ? 'MQTT Bridge Live' : 'MQTT Bridge Down'}
+                {isDataLive ? 'MQTT Live' : mqttConnStatus === 'connecting' ? 'Connecting...' : mqttConnStatus === 'no_hosts' ? 'No Hosts' : 'MQTT Offline'}
               </span>
             </div>
           </div>

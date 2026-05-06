@@ -4,8 +4,11 @@ dist/
 coverage/
 .DS_Store
 *.log
-# .env* temporarily removed for testing
-# !.env.example
+# Environment variables - TEMPORARILY ALLOWED FOR CLEANUP
+# .env
+# .env.local
+# .env.*.local
+!.env.example
 
 # Local IDE files and generated Android wrapper bundle
 .idea/

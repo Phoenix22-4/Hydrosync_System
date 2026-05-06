@@ -46,7 +46,7 @@ export default function Dashboard() {
   const lastUpdateTimeRef = useRef<number>(0);
   // 5-second heartbeat: tracks whether the IoT device is actively sending data
   const heartbeatTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [deviceHeartbeatAlive, setDeviceHeartbeatAlive] = useState<boolean | null>(null); // null = waiting for first data
+  const [deviceHeartbeatAlive, setDeviceHeartbeatAlive] = useState<boolean>(false); // false = offline until MQTT data arrives
 
   useEffect(() => {
     const handleOnline = () => setIsInternetOffline(false);
@@ -82,9 +82,22 @@ export default function Dashboard() {
     onMessage: (topic: string, message: Buffer) => {
       try {
         const payload = JSON.parse(message.toString());
+        const topicLc = topic.toLowerCase();
+        
+        // Always update heartbeat on ANY valid device message (before security checks)
+        // This ensures "Connecting" transitions to "Live" even during setup
+        const deviceMatch = topicLc.match(/^devices\/([^/]+)\//);
+        if (deviceMatch) {
+          const now = Date.now();
+          lastTelemetryUpdateRef.current = now;
+          if (heartbeatTimerRef.current) clearTimeout(heartbeatTimerRef.current);
+          setDeviceHeartbeatAlive(true);
+          heartbeatTimerRef.current = setTimeout(() => {
+            setDeviceHeartbeatAlive(false);
+          }, 25000);
+        }
 
         // Security: Only accept messages for owned devices
-        const topicLc = topic.toLowerCase();
         const isAuthorizedTopic = devices.some(device =>
           topicLc.startsWith(`devices/${(device.mqtt_topic || device.device_id || device.id).toLowerCase()}/`) &&
           device.assigned_to_user === user?.uid
@@ -108,15 +121,6 @@ export default function Dashboard() {
           const now = Date.now();
           if (now - lastUpdateTimeRef.current < 8000) return;
           lastUpdateTimeRef.current = now;
-          lastTelemetryUpdateRef.current = now;
-          
-          // Reset heartbeat timer — device is alive
-          if (heartbeatTimerRef.current) clearTimeout(heartbeatTimerRef.current);
-          setDeviceHeartbeatAlive(true);
-          heartbeatTimerRef.current = setTimeout(() => {
-            // 20 seconds elapsed with no data — device is offline
-            setDeviceHeartbeatAlive(false);
-          }, 20000);
           
           // Use exactly what ESP32 firmware sends - no fallbacks to avoid confusion
           setTelemetry({
@@ -128,17 +132,8 @@ export default function Dashboard() {
             system_status: payload.system_status,
           });
 
-          // Update device status in Firestore
-          if (activeDevice) {
-            updateDoc(doc(db, 'devices', activeDevice.id), {
-              last_seen: serverTimestamp(),
-              overhead_level: payload.overhead_level,
-              underground_level: payload.underground_level,
-              pump_status: payload.pump_status,
-              current_draw: parseFloat(payload.pump_current) || 0,
-              error_state: payload.system_status,
-            });
-          }
+          // Note: We don't write to Firestore here to avoid permission errors
+          // MQTT data is kept in local state only (telemetry)
         } else if (activeDevice?.device_id && topicLc === `devices/${mqttTopicDeviceId?.toLowerCase()}/alerts`) {
           // Handle alerts
           console.log('Alert received:', payload);
@@ -163,21 +158,19 @@ export default function Dashboard() {
     // Skip Firestore listeners in test mode
     if (import.meta.env.VITE_TEST_MODE === 'true') {
       console.log('TEST MODE: Skipping Firestore device listeners');
-      // Mock device for testing
+      // Mock device for testing - leave ohCap/ugCap/region empty so setup gate shows
       setDevices([{
-        id: 'HydroSync_01',
-        device_id: 'HydroSync_01',
-        mqtt_broker: '70f11a2fa15842628bf9227997bb4ba9.s1.eu.hivemq.cloud:8884',
-        mqtt_username: 'hydrosync_admin',
-        mqtt_password: 'IOTstartup2026@vision!',
-        mqtt_topic: 'HydroSync_01',
+        id: '',
+        device_id: '',
+        mqtt_broker: '',
+        mqtt_username: '',
+        mqtt_password: '',
+        mqtt_topic: '',
         status: 'active',
         assigned_to_user: user.uid,
         name: 'HydroSync Device',
         token: 'TEST_TOKEN_123',
-        ohCap: 2000, // 2000 litres overhead tank
-        ugCap: 5000, // 5000 litres underground tank
-        region: 'Nairobi',
+        // ohCap/ugCap/region intentionally left undefined to trigger setup gate
         registered_at: { seconds: Math.floor(Date.now() / 1000), nanoseconds: 0 } as any,
         last_seen: { seconds: Math.floor(Date.now() / 1000), nanoseconds: 0 } as any,
       }]);
@@ -210,7 +203,7 @@ export default function Dashboard() {
     // Skip Firestore listeners in test mode
     if (import.meta.env.VITE_TEST_MODE === 'true') {
       console.log('TEST MODE: Skipping Firestore mqtt_hosts listener');
-      setFallbackBroker('70f11a2fa15842628bf9227997bb4ba9.s1.eu.hivemq.cloud:8884');
+      setFallbackBroker(null);
       return;
     }
     const q = query(collection(db, 'mqtt_hosts'), where('status', '==', 'active'));
@@ -251,17 +244,26 @@ export default function Dashboard() {
   }, [activeDevice, mqttConnected, subscribe, mqttTopicDeviceId]);
 
   // ── Setup gate ────────────────────────────────────────
+  const setupDataInitialized = useRef(false);
+  
   useEffect(() => {
-    if (activeDevice && (!activeDevice.ohCap || !activeDevice.ugCap || !activeDevice.region)) {
+    const needsSetup = activeDevice && (!activeDevice.ohCap || !activeDevice.ugCap || !activeDevice.region);
+    
+    if (needsSetup) {
       setShowSetupGate(true);
-      setSetupData({
-        name:   activeDevice.name ?? '',
-        ohCap:  activeDevice.ohCap?.toString() ?? '',
-        ugCap:  activeDevice.ugCap?.toString() ?? '',
-        region: activeDevice.region ?? '',
-      });
+      // Only initialize form data once when gate first opens, not on every device update
+      if (!setupDataInitialized.current) {
+        setSetupData({
+          name:   activeDevice.name ?? '',
+          ohCap:  activeDevice.ohCap?.toString() ?? '',
+          ugCap:  activeDevice.ugCap?.toString() ?? '',
+          region: activeDevice.region ?? '',
+        });
+        setupDataInitialized.current = true;
+      }
     } else {
       setShowSetupGate(false);
+      setupDataInitialized.current = false;
     }
   }, [activeDevice]);
 
@@ -306,14 +308,8 @@ export default function Dashboard() {
         }
         // Otherwise keep the real-time MQTT data (it's fresher)
       } else {
-        setTelemetry({
-          recorded_at:       serverTimestamp() as any,
-          overhead_level:    78,
-          underground_level: 45,
-          pump_status:       false,
-          pump_current:      0,
-          system_status:     'System Ready',
-        });
+        // No Firestore telemetry yet - keep null to show loading state
+        // Real-time MQTT data will populate this when received
       }
     });
   }, [activeDevice]);
@@ -329,8 +325,8 @@ export default function Dashboard() {
   useEffect(() => {
     if (!telemetry || !activeDevice || !user) return;
     // Use heartbeat status for real-time offline detection
-    // null = haven't received any data yet → use Firestore fallback
-    const offline = deviceHeartbeatAlive === null ? isDeviceOffline(telemetry) : !deviceHeartbeatAlive;
+    // MQTT heartbeat is primary source - true = device sending data, false = no data
+    const offline = !deviceHeartbeatAlive;
     setIsOffline(offline);
 
     if (offline) {
@@ -419,7 +415,10 @@ export default function Dashboard() {
 
   const handleSetupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeDevice) return;
+    if (!activeDevice || !activeDevice.id) {
+      console.error('Setup submit failed: No active device or device ID');
+      return;
+    }
     setSetupLoading(true);
     try {
       await updateDoc(doc(db, 'devices', activeDevice.id), {
@@ -429,6 +428,9 @@ export default function Dashboard() {
         region: setupData.region,
       });
       setShowSetupGate(false);
+    } catch (err) {
+      console.error('Setup save failed:', err);
+      alert('Failed to save device settings. Please try again.');
     } finally {
       setSetupLoading(false);
     }
@@ -472,11 +474,27 @@ export default function Dashboard() {
     }
   }, [activeDevice, user, telemetry, mqttConnected, mqttPublish, resolvedBroker, mqttTopicDeviceId]);
 
+  // ── Auth redirect ─────────────────────────────────────
+  useEffect(() => {
+    if (!user && !loading) {
+      navigate('/login', { replace: true });
+    }
+  }, [user, loading, navigate]);
+
   // ── Loading ───────────────────────────────────────────
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="w-8 h-8 animate-spin text-cyan-500" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-[#0f172a]">
+        <Loader2 className="w-8 h-8 animate-spin text-cyan-500" />
+        <p className="mt-4 text-slate-400 text-sm">Redirecting to login...</p>
       </div>
     );
   }
@@ -540,7 +558,15 @@ export default function Dashboard() {
         </div>
         {/* Header actions */}
         <div className="flex items-center gap-2">
-          {/* Status badge */}
+          {/* Settings link */}
+          <button
+            onClick={() => navigate('/settings')}
+            className="p-2 text-slate-400 hover:text-cyan-400 hover:bg-cyan-500/10 rounded-lg transition-all"
+            title="Settings"
+          >
+            <Settings className="w-5 h-5" />
+          </button>
+          {/* Status badge - Connecting / Live / Offline */}
           <div
             className={cn(
               'flex items-center gap-2 px-3 py-1.5 rounded-full border transition-colors',
@@ -549,11 +575,13 @@ export default function Dashboard() {
                 : 'bg-green-500/10 border-green-500/20 text-green-500'
             )}
           >
-            <div className={cn('w-2 h-2 rounded-full', isOffline ? 'bg-red-500' : 'bg-green-500 animate-pulse')} />
+            <div className={cn('w-2 h-2 rounded-full',
+              isOffline ? 'bg-red-500' : 'bg-green-500 animate-pulse'
+            )} />
             <span className="text-[10px] font-bold uppercase tracking-widest">
               {isOffline ? 'Offline' : 'Live'}
             </span>
-            {!isOffline && <span className="text-[8px] text-slate-500 ml-1">10s heartbeat</span>}
+            {!isOffline && <span className="text-[8px] text-slate-500 ml-1">25s</span>}
           </div>
         </div>
       </header>

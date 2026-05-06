@@ -5,7 +5,7 @@ import { db } from '../../firebase';
 import { useAuth } from '../../App';
 import { Device } from '../../types';
 import { motion } from 'motion/react';
-import { Smartphone, Search, Copy, Check, ShieldAlert, ShieldCheck, Filter, Loader2, Wifi, WifiOff, Key, X, Save, ArrowLeft, Eye, EyeOff, ServerCrash } from 'lucide-react';
+import { Smartphone, Search, Copy, Check, ShieldAlert, ShieldCheck, Filter, Loader2, Wifi, WifiOff, Key, X, Save, ArrowLeft, Eye, EyeOff, ServerCrash, Settings } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { isDeviceOffline, getLastSeenString } from '../../lib/status';
 import { Telemetry } from '../../types';
@@ -29,7 +29,16 @@ export default function AdminDevices() {
   const [fallbackBroker, setFallbackBroker] = useState<string | null>(null);
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { status: bridgeStatus } = useAdminMqttAutoRegister(!!user);
+  const { status: bridgeStatus, lastMessageAt } = useAdminMqttAutoRegister(!!user);
+  
+  // Derive live/offline from actual MQTT data reception (not Firestore writes)
+  const [isDataLive, setIsDataLive] = useState(false);
+  useEffect(() => {
+    if (!lastMessageAt) { setIsDataLive(false); return; }
+    setIsDataLive(true);
+    const timer = setTimeout(() => setIsDataLive(false), 25000); // 25s = no data = offline
+    return () => clearTimeout(timer);
+  }, [lastMessageAt]);
   
   // Track last update timestamps for real-time sync per device
   const lastUpdateRef = useRef<Record<string, number>>({});
@@ -99,15 +108,9 @@ export default function AdminDevices() {
           }
         }));
         
-        // Update device status in Firestore for persistence
-        updateDoc(doc(db, 'devices', deviceId), {
-          last_seen: serverTimestamp(),
-          overhead_level: payload.overhead_level,
-          underground_level: payload.underground_level,
-          pump_status: payload.pump_status,
-          current_draw: parseFloat(payload.pump_current) || 0,
-          error_state: payload.system_status,
-        }).catch(err => console.error('Error updating device:', err));
+        // NOTE: We don't update Firestore here to avoid permission errors
+        // The device status is kept in local state only (real-time from MQTT)
+        // Firestore updates happen via the MQTT bridge hook (admin only)
       }
     } catch (err) {
       console.error('MQTT message parse error:', err);
@@ -204,7 +207,7 @@ export default function AdminDevices() {
     setMqttForm({
       username: device.mqtt_username || '',
       password: device.mqtt_password || '',
-      broker: device.mqtt_broker || '70f11a2fa15842628bf9227997bb4ba9.s1.eu.hivemq.cloud'
+      broker: device.mqtt_broker || ''
     });
   };
 
@@ -270,16 +273,28 @@ export default function AdminDevices() {
             </button>
             <h2 className="text-lg font-bold text-white">Device Registration</h2>
           </div>
-          <div className={cn(
-            "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest border",
-            bridgeStatus === 'online' ? "bg-green-500/10 border-green-500/30 text-green-500" :
-            bridgeStatus === 'connecting' ? "bg-yellow-500/10 border-yellow-500/30 text-yellow-500" :
-            "bg-red-500/10 border-red-500/30 text-red-500"
-          )}>
-            {bridgeStatus === 'online' && <Wifi className="w-3 h-3" />}
-            {bridgeStatus === 'connecting' && <Loader2 className="w-3 h-3 animate-spin" />}
-            {(bridgeStatus === 'offline' || bridgeStatus === 'no_hosts') && <WifiOff className="w-3 h-3" />}
-            Bridge: {bridgeStatus}
+          <div className="flex items-center gap-3">
+            {/* Settings link */}
+            <button
+              onClick={() => navigate('/admin/settings')}
+              className="p-2 text-slate-400 hover:text-cyan-400 hover:bg-cyan-500/10 rounded-lg transition-all"
+              title="Admin Settings"
+            >
+              <Settings className="w-5 h-5" />
+            </button>
+            {/* MQTT Status - Connecting / Live / Offline */}
+            <div className={cn(
+              "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest border",
+              isDataLive ? "bg-green-500/10 border-green-500/30 text-green-500" :
+              "bg-red-500/10 border-red-500/30 text-red-500"
+            )}>
+              {isDataLive ? (
+                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+              ) : (
+                <WifiOff className="w-3 h-3" />
+              )}
+              {isDataLive ? 'Live' : 'Offline'}
+            </div>
           </div>
         </header>
 

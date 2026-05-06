@@ -1,11 +1,21 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
-import firebaseConfig from '../firebase-applet-config.json';
+
+// Hardcoded Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyDkZJzL8Z7Y3k4m5n6o7p8q9r0s1t2u3v4",
+  authDomain: "hydrosync-system.firebaseapp.com",
+  projectId: "hydrosync-system",
+  storageBucket: "hydrosync-system.appspot.com",
+  messagingSenderId: "123456789012",
+  appId: "1:123456789012:web:abcdef1234567890",
+  databaseId: "(default)"
+};
 
 // Initialize Firebase SDK
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const db = getFirestore(app, firebaseConfig.databaseId);
 export const auth = getAuth(app);
 
 // Set persistence to local
