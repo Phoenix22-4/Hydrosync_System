@@ -212,7 +212,7 @@ export function useAdminMqttAutoRegister(enabled: boolean) {
           try {
             const parts = topic.split('/');
             if (parts.length < 2 || parts[0] !== 'devices') return;
-            const deviceId = parts[1].trim(); // Preserve original case
+            const deviceId = parts[1].trim().toUpperCase(); // Normalize to uppercase to match AddDevice flow
             if (!deviceId) return;
             const channel = (parts[2] || '').toLowerCase();
             // Reduce console logging for performance
