@@ -13,8 +13,8 @@ android {
         applicationId "com.hydrosync.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 2
-        versionName "1.2.0"
+        versionCode 3
+        versionName "1.3.2"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -34,9 +34,20 @@ android {
     
     buildTypes {
         release {
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             signingConfig signingConfigs.release
+        }
+    }
+    
+    // Build separate APKs for each architecture to reduce size
+    splits {
+        abi {
+            enable true
+            reset()
+            include 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
+            universalApk false
         }
     }
     
@@ -44,7 +55,7 @@ android {
     applicationVariants.all { variant ->
         variant.outputs.all { output ->
             if (variant.name == 'release') {
-                outputFileName = "HydroSync-App.apk"
+                outputFileName = "hydrosync.apk"
             }
         }
     }
